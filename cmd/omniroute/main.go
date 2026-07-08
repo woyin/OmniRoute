@@ -674,6 +674,16 @@ func main() {
 	}
 }
 
+
+// jsonError writes a JSON-formatted error response.
+func jsonError(w http.ResponseWriter, status int, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"error": map[string]string{"message": message},
+	})
+}
+
 func placeholderHandler(feature string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -930,7 +940,7 @@ func memorySearchHandler(dbConn *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query().Get("q")
 		if query == "" {
-			http.Error(w, `{"error":{"message":"q parameter required"}}`, http.StatusBadRequest)
+			jsonError(w, http.StatusBadRequest, "q parameter required")
 			return
 		}
 		memories, err := db.SearchMemories(dbConn, query, 20)
@@ -1005,7 +1015,7 @@ func webhooksTestHandler(dbConn *sql.DB) http.HandlerFunc {
 			}
 		}
 		if !found {
-			http.Error(w, `{"error":{"message":"webhook not found"}}`, http.StatusNotFound)
+			jsonError(w, http.StatusNotFound, "webhook not found")
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")

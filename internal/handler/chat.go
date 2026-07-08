@@ -38,20 +38,20 @@ func (h *ChatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Content-Type guard
 	contentType := r.Header.Get("Content-Type")
 	if !strings.HasPrefix(strings.ToLower(strings.Split(contentType, ";")[0]), "application/json") {
-		http.Error(w, `{"error":{"message":"Content-Type must be application/json","type":"invalid_request_error","code":"unsupported_media_type"}}`, http.StatusUnsupportedMediaType)
+		writeJSONError(w, "Content-Type must be application/json", "invalid_request_error", http.StatusUnsupportedMediaType)
 		return
 	}
 
 	// Parse request body
 	var body map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, `{"error":{"message":"Invalid JSON body","type":"invalid_request_error"}}`, http.StatusBadRequest)
+		writeJSONError(w, "Invalid JSON body", "invalid_request_error", http.StatusBadRequest)
 		return
 	}
 
 	model, _ := body["model"].(string)
 	if model == "" {
-		http.Error(w, `{"error":{"message":"model is required","type":"invalid_request_error"}}`, http.StatusBadRequest)
+		writeJSONError(w, "model is required", "invalid_request_error", http.StatusBadRequest)
 		return
 	}
 
@@ -104,7 +104,7 @@ func (h *ChatHandler) handleSingleProvider(w http.ResponseWriter, r *http.Reques
 	// Circuit breaker check
 	if h.DB != nil && db.IsProviderCircuitOpen(h.DB, providerID) {
 		log.Printf("[CHAT] request=%s circuit open for provider %s, skipping", requestID[:8], providerID)
-		http.Error(w, fmt.Sprintf(`{"error":{"message":"Provider %s circuit breaker is open","type":"circuit_open"}}`, providerID), http.StatusServiceUnavailable)
+		writeJSONErrorf(w, http.StatusServiceUnavailable, "Provider %s circuit breaker is open", providerID)
 		return
 	}
 
@@ -145,7 +145,7 @@ func (h *ChatHandler) handleSingleProvider(w http.ResponseWriter, r *http.Reques
 		if h.DB != nil {
 			db.RecordProviderFailure(h.DB, providerID)
 		}
-		http.Error(w, `{"error":{"message":"Upstream request failed","type":"upstream_error"}}`, http.StatusBadGateway)
+		writeJSONError(w, "Upstream request failed", "upstream_error", http.StatusBadGateway)
 		return
 	}
 
@@ -216,7 +216,7 @@ func (h *ChatHandler) handleComboChat(w http.ResponseWriter, r *http.Request, bo
 
 	// All targets failed
 	log.Printf("[COMBO] request=%s all targets failed: %v", requestID[:8], lastErr)
-	http.Error(w, `{"error":{"message":"All combo targets failed","type":"upstream_error"}}`, http.StatusBadGateway)
+	writeJSONError(w, "All combo targets failed", "upstream_error", http.StatusBadGateway)
 }
 
 // handleStreamingResponse forwards a streaming SSE response to the client.
@@ -247,7 +247,7 @@ func (h *ChatHandler) handleNonStreamingResponse(w http.ResponseWriter, r *http.
 
 	body, err := io.ReadAll(upstream.Body)
 	if err != nil {
-		http.Error(w, `{"error":{"message":"Failed to read upstream response","type":"upstream_error"}}`, http.StatusBadGateway)
+		writeJSONError(w, "Failed to read upstream response", "upstream_error", http.StatusBadGateway)
 		return
 	}
 
@@ -301,7 +301,7 @@ func (h *ChatHandler) handleResponsesAPIResponse(w http.ResponseWriter, r *http.
 		defer upstream.Body.Close()
 		respBody, err := io.ReadAll(upstream.Body)
 		if err != nil {
-			http.Error(w, `{"error":{"message":"Failed to read upstream response","type":"upstream_error"}}`, http.StatusBadGateway)
+			writeJSONError(w, "Failed to read upstream response", "upstream_error", http.StatusBadGateway)
 			return
 		}
 

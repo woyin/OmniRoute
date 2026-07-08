@@ -108,7 +108,7 @@ func (h *ProviderDetailHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		}
 	}
 	if id == "" {
-		http.Error(w, `{"error":{"message":"provider id required"}}`, http.StatusBadRequest)
+		writeJSONError(w, "provider id required", "invalid_request", http.StatusBadRequest)
 		return
 	}
 
@@ -116,7 +116,7 @@ func (h *ProviderDetailHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	case http.MethodGet:
 		conn, err := db.GetProviderConnection(h.DB, id)
 		if err != nil || conn == nil {
-			http.Error(w, `{"error":{"message":"provider not found"}}`, http.StatusNotFound)
+			writeJSONError(w, "provider not found", "not_found", http.StatusNotFound)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -168,7 +168,7 @@ func (h *ComboDetailHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if id == "" {
-		http.Error(w, `{"error":{"message":"combo id required"}}`, http.StatusBadRequest)
+		writeJSONError(w, "combo id required", "invalid_request", http.StatusBadRequest)
 		return
 	}
 
@@ -176,7 +176,7 @@ func (h *ComboDetailHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		combo, err := db.GetCombo(h.DB, id)
 		if err != nil || combo == nil {
-			http.Error(w, `{"error":{"message":"combo not found"}}`, http.StatusNotFound)
+			writeJSONError(w, "combo not found", "not_found", http.StatusNotFound)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -226,7 +226,7 @@ func (h *APIKeyDetailHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 	if key == "" {
-		http.Error(w, `{"error":{"message":"api key required"}}`, http.StatusBadRequest)
+		writeJSONError(w, "api key required", "invalid_request", http.StatusBadRequest)
 		return
 	}
 
@@ -420,12 +420,15 @@ func (h *AuthStatusHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	hasPassword := auth.HasManagementPassword(h.DB)
+	isAuthenticated := auth.IsAuthenticated(r)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"hasPassword":    auth.HasManagementPassword(h.DB),
-		"setupComplete":  auth.IsSetupComplete(h.DB),
+		"hasPassword":     hasPassword,
+		"setupComplete":   auth.IsSetupComplete(h.DB),
 		"bootstrapWindow": auth.IsBootstrapWindow(h.DB),
-		"requireLogin":   true,
+		"requireLogin":    true,
+		"isAuthenticated": isAuthenticated,
 	})
 }
 

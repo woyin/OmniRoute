@@ -133,6 +133,14 @@ func GetCallLogs(db *sql.DB, provider string, limit int) ([]CallLog, error) {
 }
 
 // GetUsageSummary returns aggregated usage stats.
+// safeSuccessRate returns a formatted success rate string, avoiding NaN when total is 0.
+func safeSuccessRate(success, total int) string {
+	if total == 0 {
+		return "0.0%"
+	}
+	return fmt.Sprintf("%.1f%%", float64(success)/float64(total)*100)
+}
+
 func GetUsageSummary(db *sql.DB) (map[string]interface{}, error) {
 	var totalRequests int
 	var totalInputTokens int
@@ -175,7 +183,7 @@ func GetUsageSummary(db *sql.DB) (map[string]interface{}, error) {
 		"totalInputTokens":  totalInputTokens,
 		"totalOutputTokens": totalOutputTokens,
 		"totalCost":         totalCost,
-		"successRate":       fmt.Sprintf("%.1f%%", float64(successCount)/float64(totalRequests)*100),
+		"successRate":       safeSuccessRate(successCount, totalRequests),
 		"providers":         providers,
 	}, nil
 }
@@ -259,8 +267,8 @@ func ExportAll(db *sql.DB) (map[string]interface{}, error) {
 		export["apiKeys"] = keys
 	}
 
-	// Settings
-	rows, err := db.Query("SELECT key, value FROM key_value WHERE namespace = 'settings'")
+	// Settings (exclude sensitive values like password)
+	rows, err := db.Query("SELECT key, value FROM key_value WHERE namespace = 'settings' AND key != 'password'")
 	if err == nil {
 		settings := make(map[string]string)
 		defer rows.Close()

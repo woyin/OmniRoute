@@ -96,7 +96,7 @@ async function checkAuth(){
   const s=await api('/api/auth/status');
   if(!s){S.checked=true;S.auth=false;render();return}
   S.bootstrap=!!s.bootstrapWindow;
-  S.auth=s.hasPassword&&!s.bootstrapWindow;
+  S.auth=!!s.isAuthenticated;
   S.checked=true;
   const v=await api('/api/system/version');
   if(v)document.getElementById('version').textContent='v'+v.version;

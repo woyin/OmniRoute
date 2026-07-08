@@ -195,7 +195,8 @@ func (h *RequireLoginHandler) handlePost(w http.ResponseWriter, r *http.Request)
 	// or if already authenticated (TODO: check session cookie)
 	if !IsBootstrapWindow(h.DB) {
 		w.Header().Set("Content-Type", "application/json")
-		http.Error(w, `{"error":"Unauthorized"}`, http.StatusUnauthorized)
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(`{"error":{"message":"Unauthorized — password already set","type":"authentication_error"}}`))
 		return
 	}
 
@@ -204,22 +205,22 @@ func (h *RequireLoginHandler) handlePost(w http.ResponseWriter, r *http.Request)
 		RequireLogin *bool  `json:"requireLogin,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, `{"error":{"message":"Invalid JSON"}}`, http.StatusBadRequest)
+		w.Header().Set("Content-Type", "application/json"); w.WriteHeader(http.StatusBadRequest); w.Write([]byte(`{"error":{"message":"Invalid JSON"}}`))
 		return
 	}
 
 	if body.Password == "" {
-		http.Error(w, `{"error":{"message":"password is required"}}`, http.StatusBadRequest)
+		w.Header().Set("Content-Type", "application/json"); w.WriteHeader(http.StatusBadRequest); w.Write([]byte(`{"error":{"message":"password is required"}}`))
 		return
 	}
 
 	if len(body.Password) < 6 {
-		http.Error(w, `{"error":{"message":"password must be at least 6 characters"}}`, http.StatusBadRequest)
+		w.Header().Set("Content-Type", "application/json"); w.WriteHeader(http.StatusBadRequest); w.Write([]byte(`{"error":{"message":"password must be at least 6 characters"}}`))
 		return
 	}
 
 	if err := SetManagementPassword(h.DB, body.Password); err != nil {
-		http.Error(w, `{"error":{"message":"Failed to set password"}}`, http.StatusInternalServerError)
+		w.Header().Set("Content-Type", "application/json"); w.WriteHeader(http.StatusInternalServerError); w.Write([]byte(`{"error":{"message":"Failed to set password"}}`))
 		return
 	}
 
@@ -245,7 +246,7 @@ func (h *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	secret := GetJWTSecret()
 	if secret == "" {
-		http.Error(w, `{"error":"Server misconfigured: JWT_SECRET not set"}`, http.StatusInternalServerError)
+		w.Header().Set("Content-Type", "application/json"); w.WriteHeader(http.StatusInternalServerError); w.Write([]byte(`{"error":{"message":"Server misconfigured: JWT_SECRET not set"}}`))
 		return
 	}
 
@@ -253,24 +254,24 @@ func (h *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, `{"error":{"message":"Invalid JSON"}}`, http.StatusBadRequest)
+		w.Header().Set("Content-Type", "application/json"); w.WriteHeader(http.StatusBadRequest); w.Write([]byte(`{"error":{"message":"Invalid JSON"}}`))
 		return
 	}
 
 	if body.Password == "" {
-		http.Error(w, `{"error":{"message":"password is required"}}`, http.StatusBadRequest)
+		w.Header().Set("Content-Type", "application/json"); w.WriteHeader(http.StatusBadRequest); w.Write([]byte(`{"error":{"message":"password is required"}}`))
 		return
 	}
 
 	if !VerifyManagementPassword(h.DB, body.Password) {
 		log.Println("[AUTH] Login failed: invalid password")
-		http.Error(w, `{"error":{"message":"Invalid password"}}`, http.StatusUnauthorized)
+		w.Header().Set("Content-Type", "application/json"); w.WriteHeader(http.StatusUnauthorized); w.Write([]byte(`{"error":{"message":"Invalid password"}}`))
 		return
 	}
 
 	token, err := GenerateSessionToken()
 	if err != nil {
-		http.Error(w, `{"error":{"message":"Failed to generate session"}}`, http.StatusInternalServerError)
+		w.Header().Set("Content-Type", "application/json"); w.WriteHeader(http.StatusInternalServerError); w.Write([]byte(`{"error":{"message":"Failed to generate session"}}`))
 		return
 	}
 
