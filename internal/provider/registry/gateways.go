@@ -216,4 +216,56 @@ func RegisterGatewayProviders() {
 		AuthType:   AuthTypeAPIKey,
 		PassthroughModels: true,
 	})
+	// --- Ported from main branch ---
+
+	Register(&RegistryEntry{
+		ID:         "kilo-gateway",
+		Name:       "Kilo Gateway",
+		Format:     FormatOpenAI,
+		AuthType:   AuthTypeAPIKey,
+		BaseURL:    "https://api.kilo.ai/api/gateway/chat/completions",
+		AuthHeader: "Authorization",
+		AuthPrefix: "Bearer ",
+	})
+
+	Register(&RegistryEntry{
+		ID:         "vercel-ai-gateway",
+		Name:       "Vercel AI Gateway",
+		Format:     FormatOpenAI,
+		AuthType:   AuthTypeAPIKey,
+		BaseURL:    "https://ai-gateway.vercel.sh/v1/chat/completions",
+		AuthHeader: "Authorization",
+		AuthPrefix: "Bearer ",
+	})
+
+	Register(&RegistryEntry{
+		ID:         "tokenrouter",
+		Name:       "TokenRouter",
+		Format:     FormatOpenAI,
+		AuthType:   AuthTypeAPIKey,
+		BaseURL:    "https://api.tokenrouter.com/v1/chat/completions",
+		AuthHeader: "Authorization",
+		AuthPrefix: "Bearer ",
+	})
+
+	Register(&RegistryEntry{
+		ID:         "synthetic",
+		Name:       "Synthetic",
+		Format:     FormatOpenAI,
+		AuthType:   AuthTypeAPIKey,
+		BaseURL:    "https://api.synthetic.new/openai/v1/chat/completions",
+		AuthHeader: "Authorization",
+		AuthPrefix: "Bearer ",
+	})
+
+	Register(&RegistryEntry{
+		ID:         "openadapter",
+		Name:       "OpenAdapter",
+		Format:     FormatOpenAI,
+		AuthType:   AuthTypeAPIKey,
+		BaseURL:    "https://api.openadapter.in/v1/chat/completions",
+		AuthHeader: "Authorization",
+		AuthPrefix: "Bearer ",
+	})
+
 }

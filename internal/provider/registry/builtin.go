@@ -84,13 +84,28 @@ func RegisterBuiltinProviders() {
 	RegisterRegionalProviders()
 
 	// Gateway / router / specialty providers
-	RegisterGatewayProviders()
 
 	// Extended: IDE/CLI, search, cloud-agents, misc
 	RegisterExtendedProviders()
 
 	// OAuth providers
 	RegisterOAuthProviders()
+
+
+	// Search providers
+	RegisterSearchProviders()
+
+	// Local/self-hosted providers
+	RegisterLocalProviders()
+
+	// Missing providers ported from main branch
+	RegisterGatewayProviders()
+	RegisterAggregatorProviders()
+	RegisterRegionalCnProviders()
+	RegisterSpecialtyProviders()
+	RegisterCodingProviders()
+	RegisterInferenceProviders()
+	RegisterMiscProviders()
 
 	// Custom-compatible (user-defined)
 	RegisterOpenAICompatible()
