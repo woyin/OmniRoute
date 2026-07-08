@@ -6,7 +6,7 @@
 <title>OmniRoute</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-:root{--bg:#0a0a0a;--surface:#141414;--border:#262626;--text:#e5e5e5;--muted:#737373;--accent:#3b82f6;--accent2:#8b5cf6;--green:#22c55e;--red:#ef4444;--orange:#f59e0b}
+:root{--bg:#0a0a0a;--surface:#141414;--surface2:#1a1a1a;--border:#262626;--border2:#333;--text:#e5e5e5;--muted:#737373;--accent:#3b82f6;--accent2:#8b5cf6;--green:#22c55e;--red:#ef4444;--orange:#f59e0b;--purple:#a855f7}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);line-height:1.6}
 a{color:var(--accent);text-decoration:none}
 .container{max-width:1200px;margin:0 auto;padding:0 24px}
@@ -30,15 +30,23 @@ main{padding:32px 0}
 .tag-blue{background:rgba(59,130,246,.15);color:var(--accent)}
 .tag-orange{background:rgba(245,158,11,.15);color:var(--orange)}
 .tag-red{background:rgba(239,68,68,.15);color:var(--red)}
+.tag-purple{background:rgba(168,85,247,.15);color:var(--purple)}
 table{width:100%;border-collapse:collapse;font-size:13px}
 th{text-align:left;padding:8px 12px;color:var(--muted);font-weight:500;border-bottom:1px solid var(--border)}
 td{padding:8px 12px;border-bottom:1px solid var(--border)}
 tr:hover{background:rgba(59,130,246,.05)}
-.provider-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
-.provider-item{display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:8px;border:1px solid var(--border);font-size:13px;transition:all .15s}
-.provider-item:hover{border-color:var(--accent);background:rgba(59,130,246,.05)}
+.provider-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px}
+.provider-item{display:flex;align-items:center;gap:10px;padding:12px 16px;border-radius:10px;border:1px solid var(--border);font-size:13px;cursor:pointer;transition:all .15s;position:relative}
+.provider-item:hover{border-color:var(--accent);background:rgba(59,130,246,.06);transform:translateY(-1px)}
+.provider-item.connected{border-color:var(--green);background:rgba(34,197,94,.04)}
+.provider-item.connected:hover{border-color:var(--green)}
 .provider-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-.dot-apikey{background:var(--accent)}.dot-oauth{background:var(--accent2)}.dot-noauth{background:var(--green)}
+.dot-apikey{background:var(--accent)}.dot-oauth{background:var(--accent2)}.dot-noauth{background:var(--green)}.dot-webcookie{background:var(--purple)}
+.provider-info{flex:1;min-width:0}
+.provider-name{font-weight:600;font-size:13px}
+.provider-meta{font-size:11px;color:var(--muted);margin-top:2px}
+.provider-badge{position:absolute;top:6px;right:8px;font-size:9px;padding:1px 6px;border-radius:3px}
+.badge-connected{background:rgba(34,197,94,.15);color:var(--green)}
 .endpoint-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:4px;font-size:13px;font-family:'SF Mono',Monaco,monospace}
 .endpoint{padding:6px 12px;border-radius:6px;background:var(--bg)}
 .endpoint .method{color:var(--accent);font-weight:600}
@@ -57,6 +65,39 @@ tr:hover{background:rgba(59,130,246,.05)}
 .search-bar:focus{border-color:var(--accent)}
 .loading{text-align:center;padding:40px;color:var(--muted)}
 .err-box{background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:8px;padding:16px;margin:16px 0;color:var(--red);font-size:13px;white-space:pre-wrap}
+
+/* Modal overlay */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+.modal{background:var(--surface2);border:1px solid var(--border2);border-radius:16px;padding:32px;max-width:480px;width:90%;max-height:90vh;overflow-y:auto;position:relative}
+.modal h2{font-size:20px;font-weight:700;margin-bottom:4px}
+.modal .subtitle{color:var(--muted);font-size:13px;margin-bottom:24px}
+.modal-close{position:absolute;top:16px;right:16px;background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:4px 8px;border-radius:4px}
+.modal-close:hover{color:var(--text);background:var(--surface)}
+.modal label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
+.modal input[type="text"],.modal input[type="password"]{width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;margin-bottom:16px;outline:none}
+.modal input:focus{border-color:var(--accent)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:600;border:none;cursor:pointer;transition:all .15s;width:100%}
+.btn:hover{opacity:.9}
+.btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:white}
+.btn-oauth{background:linear-gradient(135deg,var(--accent2),#7c3aed);color:white}
+.btn-danger{background:var(--red);color:white}
+.btn-outline{background:transparent;border:1px solid var(--border);color:var(--text)}
+.btn-outline:hover{border-color:var(--accent);color:var(--accent)}
+.btn-sm{padding:6px 12px;font-size:12px;width:auto}
+.btn-row{display:flex;gap:8px;margin-top:16px}
+
+/* Connection list in modal */
+.conn-item{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:8px;margin-bottom:8px;font-size:13px}
+.conn-item .conn-info{flex:1}
+.conn-item .conn-name{font-weight:600}
+.conn-item .conn-key{color:var(--muted);font-size:11px;margin-top:2px}
+.conn-actions{display:flex;gap:6px}
+
+/* Filter tabs */
+.filter-row{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+.filter-btn{background:var(--surface);border:1px solid var(--border);color:var(--muted);padding:4px 12px;border-radius:6px;font-size:12px;cursor:pointer;transition:all .15s}
+.filter-btn:hover{border-color:var(--accent);color:var(--text)}
+.filter-btn.active{background:var(--accent);color:white;border-color:var(--accent)}
 </style>
 </head>
 <body>
@@ -66,7 +107,7 @@ tr:hover{background:rgba(59,130,246,.05)}
 
 <script>
 const API='';
-const S={tab:'overview',auth:false,checked:false,bootstrap:false};
+const S={tab:'overview',auth:false,checked:false,bootstrap:false,provFilter:'all',provSearch:'',provRegistry:[],provConnections:[]};
 
 async function api(path,opts={}){
   try{
@@ -125,10 +166,11 @@ function renderLogin(){
 }
 
 async function renderOverview(){
-  const[health,models,mcp,a2a]=await Promise.all([api('/health'),api('/api/v1/models'),api('/api/mcp/status'),api('/api/a2a/status')]);
+  const[health,models,mcp,a2a,conns]=await Promise.all([api('/health'),api('/api/v1/models'),api('/api/mcp/status'),api('/api/a2a/status'),api('/api/providers')]);
   const mc=Array.isArray(models?.data)?models.data.length:0;
   const tc=mcp?.toolCount||0;
   const sc=a2a?.skillCount||0;
+  const cc=Array.isArray(conns)?conns.filter(c=>c.isActive).length:0;
   const ok=health?.status==='ok';
   return `<div class="grid">
     <div class="card stat"><div class="value">${mc}</div><div class="label">Models</div></div>
@@ -140,31 +182,186 @@ async function renderOverview(){
     <div><code style="color:var(--accent)">POST /api/v1/chat/completions</code> — Chat with any model</div>
     <div><code style="color:var(--accent)">GET  /api/v1/models</code> — List all models</div>
     <div><code style="color:var(--accent)">POST /api/v1/embeddings</code> — Generate embeddings</div>
-    <div><code style="color:var(--accent)">GET  /api/mcp/tools</code> — MCP tool catalog</div>
-    <div><code style="color:var(--accent)">POST /api/auth/login</code> — Auth login</div>
+    <div><code style="color:var(--accent)">GET  /api/providers/registry</code> — Provider catalog</div>
+    <div><code style="color:var(--accent)">POST /api/providers</code> — Add a provider connection</div>
   </div></div>`;
 }
 
+async function loadProviders(){
+  const[reg,conns]=await Promise.all([api('/api/providers/registry'),api('/api/providers')]);
+  S.provRegistry=reg?(Array.isArray(reg.data)?reg.data:(Array.isArray(reg)?reg:[])):[];
+  S.provConnections=Array.isArray(conns)?conns:[];
+}
+
+function getConnectionCount(providerId){
+  return S.provConnections.filter(c=>c.provider===providerId&&c.isActive).length;
+}
+
+function maskKey(key){
+  if(!key)return '';
+  if(key.length<=8)return '***';
+  return key.substring(0,4)+'...'+key.substring(key.length-4);
+}
+
 async function renderProviders(){
-  const r=await api('/api/providers/registry');
-  let list=[];
-  if(r){
-    list=Array.isArray(r.data)?r.data:(Array.isArray(r)?r:[]);
-  }
+  if(!S.provRegistry.length)await loadProviders();
+  const list=S.provRegistry;
   if(!list.length)return `<div class="card"><h2>Providers</h2><p style="color:var(--muted)">No providers loaded. Check server logs.</p></div>`;
   const authCounts={apikey:0,oauth:0,noauth:0};
   list.forEach(p=>{authCounts[p.authType]=(authCounts[p.authType]||0)+1});
-  return `<div class="card"><h2>Providers (${list.length})</h2>
-    <div style="margin-bottom:16px;display:flex;gap:8px">
+  const connectedCount=S.provConnections.filter(c=>c.isActive).length;
+
+  return `<div class="card"><h2>Providers (${list.length}) · <span style="color:var(--green)">${connectedCount} connected</span></h2>
+    <div style="margin-bottom:16px;display:flex;gap:8px;flex-wrap:wrap">
       <span class="tag tag-blue">API Key: ${authCounts.apikey||0}</span>
       <span class="tag tag-orange">OAuth: ${authCounts.oauth||0}</span>
       <span class="tag tag-green">No Auth: ${authCounts.noauth||0}</span>
     </div>
-    <input class="search-bar" placeholder="Search providers..." oninput="filterProv(this.value)">
-    <div class="provider-grid" id="prov-grid">${list.map(p=>`<div class="provider-item" data-n="${(p.name||'').toLowerCase()} ${(p.id||'').toLowerCase()}"><div class="provider-dot dot-${p.authType||'apikey'}"></div><div><strong>${p.name||p.id}</strong><br><span style="font-size:11px;color:var(--muted)">${p.id} · ${p.authType||'apikey'} · ${p.modelCount||0} models</span></div></div>`).join('')}</div></div>`;
+    <div class="filter-row">
+      <button class="filter-btn ${S.provFilter==='all'?'active':''}" onclick="setProvFilter('all')">All</button>
+      <button class="filter-btn ${S.provFilter==='apikey'?'active':''}" onclick="setProvFilter('apikey')">API Key</button>
+      <button class="filter-btn ${S.provFilter==='oauth'?'active':''}" onclick="setProvFilter('oauth')">OAuth</button>
+      <button class="filter-btn ${S.provFilter==='noauth'?'active':''}" onclick="setProvFilter('noauth')">Free / No Auth</button>
+      <button class="filter-btn ${S.provFilter==='connected'?'active':''}" onclick="setProvFilter('connected')">Connected</button>
+    </div>
+    <input class="search-bar" placeholder="Search providers..." value="${S.provSearch}" oninput="setProvSearch(this.value)">
+    <div class="provider-grid" id="prov-grid">${renderProviderGrid(list)}</div></div>`;
 }
 
-function filterProv(q){document.querySelectorAll('.provider-item').forEach(el=>{el.style.display=el.dataset.n.includes(q.toLowerCase())?'':'none'})}
+function renderProviderGrid(list){
+  const q=S.provSearch.toLowerCase();
+  return list.filter(p=>{
+    if(S.provFilter==='connected')return getConnectionCount(p.id)>0;
+    if(S.provFilter!=='all'&&p.authType!==S.provFilter)return false;
+    return true;
+  }).filter(p=>{
+    if(!q)return true;
+    return (p.name||'').toLowerCase().includes(q)||(p.id||'').toLowerCase().includes(q);
+  }).map(p=>{
+    const cc=getConnectionCount(p.id);
+    const cls=cc>0?'connected':'';
+    const badge=cc>0?`<span class="provider-badge badge-connected">${cc} conn</span>`:'';
+    return `<div class="provider-item ${cls}" onclick="openProviderModal('${p.id}')" data-n="${(p.name||'').toLowerCase()} ${(p.id||'').toLowerCase()}">
+      <div class="provider-dot dot-${p.authType||'apikey'}"></div>
+      <div class="provider-info"><div class="provider-name">${p.name||p.id}</div><div class="provider-meta">${p.id} · ${p.authType||'apikey'} · ${p.modelCount||0} models${p.hasFree?' · free':''}</div></div>
+      ${badge}
+    </div>`;
+  }).join('');
+}
+
+function setProvFilter(f){S.provFilter=f;renderProvidersOnly()}
+function setProvSearch(q){S.provSearch=q;renderProvidersOnly()}
+function renderProvidersOnly(){
+  const grid=document.getElementById('prov-grid');
+  if(grid)grid.innerHTML=renderProviderGrid(S.provRegistry);
+}
+
+function openProviderModal(providerId){
+  const p=S.provRegistry.find(x=>x.id===providerId);
+  if(!p){toast('Provider not found','error');return}
+  const conns=S.provConnections.filter(c=>c.provider===providerId);
+  const isOAuth=p.authType==='oauth';
+  const isNoAuth=p.authType==='noauth';
+
+  let connHtml='';
+  if(conns.length){
+    connHtml=`<div style="margin-bottom:20px"><label>Active Connections</label>${conns.map(c=>`
+      <div class="conn-item">
+        <div class="conn-info"><div class="conn-name">${c.name||c.id}</div><div class="conn-key">${c.apiKey?maskKey(c.apiKey):c.accessToken?'OAuth token':'No key'}</div></div>
+        <div class="conn-actions">
+          <button class="btn btn-outline btn-sm" onclick="testProvider('${providerId}','${c.id}')">Test</button>
+          <button class="btn btn-outline btn-sm" style="border-color:var(--red);color:var(--red)" onclick="deleteConnection('${c.id}','${providerId}')">Delete</button>
+        </div>
+      </div>`).join('')}</div>`;
+  }
+
+  let addHtml='';
+  if(isOAuth){
+    addHtml=`<div style="margin-top:8px">
+      <button class="btn btn-oauth" onclick="startOAuth('${providerId}')">Sign in with ${p.name}</button>
+      <div style="text-align:center;margin:12px 0;color:var(--muted);font-size:12px">or paste a token manually</div>
+      <label>Access Token</label>
+      <input type="password" id="modal-token" placeholder="Paste access token...">
+      <button class="btn btn-primary" onclick="addTokenConnection('${providerId}')">Add Token</button>
+    </div>`;
+  } else if(isNoAuth){
+    addHtml=`<div style="margin-top:8px">
+      <p style="color:var(--muted);font-size:13px;margin-bottom:12px">No authentication needed. Just add a connection to activate.</p>
+      <button class="btn btn-primary" onclick="addNoAuthConnection('${providerId}')">Add Connection</button>
+    </div>`;
+  } else {
+    addHtml=`<div style="margin-top:8px">
+      <label>API Key</label>
+      <input type="password" id="modal-apikey" placeholder="sk-... or your API key">
+      <label style="margin-top:8px">Connection Name (optional)</label>
+      <input type="text" id="modal-connname" placeholder="My ${p.name} key">
+      <button class="btn btn-primary" onclick="addApiKeyConnection('${providerId}')">Add API Key</button>
+    </div>`;
+  }
+
+  const html=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+      <h2>${p.name}</h2>
+      <div class="subtitle">${p.id} · ${p.authType} · ${p.modelCount||0} models · ${p.baseUrl||''}</div>
+      ${connHtml}
+      ${conns.length?'<div style="border-top:1px solid var(--border);padding-top:16px"><label>Add Another Connection</label></div>':''}
+      ${addHtml}
+    </div>
+  </div>`;
+
+  const el=document.createElement('div');
+  el.id='modal-root';
+  el.innerHTML=html;
+  document.body.appendChild(el);
+}
+
+function closeModal(){
+  const el=document.getElementById('modal-root');
+  if(el)el.remove();
+}
+
+async function addApiKeyConnection(providerId){
+  const apiKey=document.getElementById('modal-apikey')?.value;
+  const name=document.getElementById('modal-connname')?.value||'';
+  if(!apiKey){toast('API key is required','error');return}
+  const r=await api('/api/providers',{method:'POST',body:JSON.stringify({provider:providerId,name:name||providerId+' Key',apiKey,isActive:true})});
+  if(r&&r.id){toast('Connection added!');closeModal();await loadProviders();renderProvidersOnly()}else{toast(r?.error||'Failed to add','error')}
+}
+
+async function addTokenConnection(providerId){
+  const token=document.getElementById('modal-token')?.value;
+  if(!token){toast('Token is required','error');return}
+  const r=await api('/api/providers',{method:'POST',body:JSON.stringify({provider:providerId,name:providerId+' OAuth',accessToken:token,isActive:true})});
+  if(r&&r.id){toast('Token added!');closeModal();await loadProviders();renderProvidersOnly()}else{toast(r?.error||'Failed to add','error')}
+}
+
+async function addNoAuthConnection(providerId){
+  const r=await api('/api/providers',{method:'POST',body:JSON.stringify({provider:providerId,name:providerId+' (free)',isActive:true})});
+  if(r&&r.id){toast('Connection added!');closeModal();await loadProviders();renderProvidersOnly()}else{toast(r?.error||'Failed to add','error')}
+}
+
+async function startOAuth(providerId){
+  const r=await api('/api/oauth/'+providerId+'/start');
+  if(r&&r.authUrl){
+    toast('Opening OAuth flow...');
+    const w=window.open(r.authUrl,'oauth','width=600,height=700');
+    if(!w)toast('Popup blocked — allow popups for this site','error');
+  }else{toast(r?.error?.message||'OAuth not configured for this provider','error')}
+}
+
+async function deleteConnection(connId,providerId){
+  if(!confirm('Delete this connection?'))return;
+  const r=await api('/api/providers/'+connId,{method:'DELETE'});
+  if(r&&r.success){toast('Connection deleted');closeModal();await loadProviders();openProviderModal(providerId)}else{toast(r?.error||'Failed to delete','error')}
+}
+
+async function testProvider(providerId,connId){
+  toast('Testing connection...');
+  const conn=S.provConnections.find(c=>c.id===connId);
+  const r=await api('/api/providers/test',{method:'POST',body:JSON.stringify({provider:providerId,apiKey:conn?.apiKey,accessToken:conn?.accessToken})});
+  if(r&&r.success){toast('Connection OK!')}else{toast(r?.message||'Connection failed','error')}
+}
 
 async function renderModels(){
   const m=await api('/api/v1/models');
