@@ -1,0 +1,26 @@
+# Build
+omniroute
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test
+*.test
+*.out
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal

@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OmniRoute</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0a0a0a;--surface:#141414;--border:#262626;--text:#e5e5e5;--muted:#737373;--accent:#3b82f6;--accent2:#8b5cf6;--green:#22c55e;--red:#ef4444;--orange:#f59e0b}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);line-height:1.6}
+a{color:var(--accent);text-decoration:none}
+.container{max-width:1200px;margin:0 auto;padding:0 24px}
+header{border-bottom:1px solid var(--border);padding:16px 0;position:sticky;top:0;background:var(--bg);z-index:50}
+header .container{display:flex;align-items:center;justify-content:space-between}
+.logo{font-size:20px;font-weight:700;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.logo span{font-weight:400;opacity:.7;margin-left:8px;font-size:14px}
+nav{display:flex;gap:8px}
+nav button{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:6px 14px;border-radius:8px;cursor:pointer;font-size:13px;transition:all .15s}
+nav button:hover{border-color:var(--accent);color:var(--accent)}
+nav button.active{background:var(--accent);color:white;border-color:var(--accent)}
+main{padding:32px 0}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:16px}
+.card h2{font-size:16px;font-weight:600;margin-bottom:16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px}
+.stat{text-align:center;padding:20px}
+.stat .value{font-size:32px;font-weight:700;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.stat .label{font-size:13px;color:var(--muted);margin-top:4px}
+.tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:500}
+.tag-green{background:rgba(34,197,94,.15);color:var(--green)}
+.tag-blue{background:rgba(59,130,246,.15);color:var(--accent)}
+.tag-orange{background:rgba(245,158,11,.15);color:var(--orange)}
+.tag-red{background:rgba(239,68,68,.15);color:var(--red)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:8px 12px;color:var(--muted);font-weight:500;border-bottom:1px solid var(--border)}
+td{padding:8px 12px;border-bottom:1px solid var(--border)}
+tr:hover{background:rgba(59,130,246,.05)}
+.provider-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
+.provider-item{display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:8px;border:1px solid var(--border);font-size:13px;transition:all .15s}
+.provider-item:hover{border-color:var(--accent);background:rgba(59,130,246,.05)}
+.provider-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.dot-apikey{background:var(--accent)}.dot-oauth{background:var(--accent2)}.dot-noauth{background:var(--green)}
+.endpoint-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:4px;font-size:13px;font-family:'SF Mono',Monaco,monospace}
+.endpoint{padding:6px 12px;border-radius:6px;background:var(--bg)}
+.endpoint .method{color:var(--accent);font-weight:600}
+.setup-form{max-width:400px;margin:80px auto;text-align:center}
+.setup-form h1{font-size:28px;margin-bottom:8px}
+.setup-form p{color:var(--muted);margin-bottom:32px}
+.setup-form input{width:100%;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;margin-bottom:16px;outline:none}
+.setup-form input:focus{border-color:var(--accent)}
+.setup-form button{width:100%;padding:12px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:white;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer}
+.setup-form button:hover{opacity:.9}
+.toast{position:fixed;top:20px;right:20px;padding:12px 20px;border-radius:8px;font-size:13px;z-index:100;opacity:0;transition:opacity .3s}
+.toast.show{opacity:1}
+.toast-success{background:rgba(34,197,94,.15);border:1px solid var(--green);color:var(--green)}
+.toast-error{background:rgba(239,68,68,.15);border:1px solid var(--red);color:var(--red)}
+.search-bar{width:100%;padding:10px 16px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;outline:none;margin-bottom:16px}
+.search-bar:focus{border-color:var(--accent)}
+.loading{text-align:center;padding:40px;color:var(--muted)}
+.err-box{background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:8px;padding:16px;margin:16px 0;color:var(--red);font-size:13px;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<div id="toast" class="toast"></div>
+<header><div class="container"><div class="logo">OmniRoute <span id="version"></span></div><nav id="nav"></nav></div></header>
+<main class="container"><div id="app"><div class="loading">Loading...</div></div></main>
+
+<script>
+const API='';
+const S={tab:'overview',auth:false,checked:false,bootstrap:false};
+
+async function api(path,opts={}){
+  try{
+    const r=await fetch(API+path,{...opts,credentials:'include',headers:{'Content-Type':'application/json',...opts.headers}});
+    if(r.status===401){S.auth=false;render();return null}
+    const t=await r.text();
+    if(!t)return null;
+    return JSON.parse(t);
+  }catch(e){console.error('API error',path,e);return null}
+}
+
+function toast(msg,type='success'){
+  const t=document.getElementById('toast');t.textContent=msg;
+  t.className='toast toast-'+type+' show';
+  setTimeout(()=>t.classList.remove('show'),3000);
+}
+
+function nav(){
+  if(!S.auth)return '';
+  const tabs=[['overview','Overview'],['providers','Providers'],['models','Models'],['routes','Routes'],['mcp','MCP Tools']];
+  return tabs.map(([id,l])=>`<button class="${S.tab===id?'active':''}" onclick="switchTab('${id}')">${l}</button>`).join('');
+}
+
+function switchTab(t){S.tab=t;render()}
+
+async function checkAuth(){
+  const s=await api('/api/auth/status');
+  if(!s){S.checked=true;S.auth=false;render();return}
+  S.bootstrap=!!s.bootstrapWindow;
+  S.auth=s.hasPassword&&!s.bootstrapWindow;
+  S.checked=true;
+  const v=await api('/api/system/version');
+  if(v)document.getElementById('version').textContent='v'+v.version;
+  render();
+}
+
+async function doSetup(e){
+  e.preventDefault();
+  const pw=document.getElementById('pw').value;
+  const r=await api('/api/auth/require-login',{method:'POST',body:JSON.stringify({password:pw})});
+  if(r&&r.success){toast('Password set!');S.bootstrap=false;await doLogin(pw)}else{toast(r?.error?.message||'Failed','error')}
+}
+
+async function doLogin(pw){
+  if(!pw)pw=document.getElementById('login-pw')?.value;
+  const r=await api('/api/auth/login',{method:'POST',body:JSON.stringify({password:pw})});
+  if(r&&r.success){toast('Logged in!');S.auth=true;S.bootstrap=false;render()}else{toast(r?.error?.message||'Invalid password','error')}
+}
+
+function renderSetup(){
+  return `<div class="setup-form"><h1>Welcome to OmniRoute</h1><p>Set your management password to get started</p><form onsubmit="doSetup(event)"><input id="pw" type="password" placeholder="Password (min 6 chars)" required minlength="6"><button type="submit">Set Password</button></form></div>`;
+}
+
+function renderLogin(){
+  return `<div class="setup-form"><h1>OmniRoute</h1><p>Enter your password to continue</p><form onsubmit="doLogin();return false"><input id="login-pw" type="password" placeholder="Password" required><button type="submit">Login</button></form></div>`;
+}
+
+async function renderOverview(){
+  const[health,models,mcp,a2a]=await Promise.all([api('/health'),api('/api/v1/models'),api('/api/mcp/status'),api('/api/a2a/status')]);
+  const mc=Array.isArray(models?.data)?models.data.length:0;
+  const tc=mcp?.toolCount||0;
+  const sc=a2a?.skillCount||0;
+  const ok=health?.status==='ok';
+  return `<div class="grid">
+    <div class="card stat"><div class="value">${mc}</div><div class="label">Models</div></div>
+    <div class="card stat"><div class="value">${tc}</div><div class="label">MCP Tools</div></div>
+    <div class="card stat"><div class="value">${sc}</div><div class="label">A2A Skills</div></div>
+    <div class="card stat"><div class="value" style="color:${ok?'var(--green)':'var(--red)'}">${ok?'&#10003;':'&#10007;'}</div><div class="label">Health</div></div>
+  </div>
+  <div class="card"><h2>Quick Start</h2><div style="font-size:14px;line-height:2.2">
+    <div><code style="color:var(--accent)">POST /api/v1/chat/completions</code> — Chat with any model</div>
+    <div><code style="color:var(--accent)">GET  /api/v1/models</code> — List all models</div>
+    <div><code style="color:var(--accent)">POST /api/v1/embeddings</code> — Generate embeddings</div>
+    <div><code style="color:var(--accent)">GET  /api/mcp/tools</code> — MCP tool catalog</div>
+    <div><code style="color:var(--accent)">POST /api/auth/login</code> — Auth login</div>
+  </div></div>`;
+}
+
+async function renderProviders(){
+  const r=await api('/api/providers/registry');
+  let list=[];
+  if(r){
+    list=Array.isArray(r.data)?r.data:(Array.isArray(r)?r:[]);
+  }
+  if(!list.length)return `<div class="card"><h2>Providers</h2><p style="color:var(--muted)">No providers loaded. Check server logs.</p></div>`;
+  const authCounts={apikey:0,oauth:0,noauth:0};
+  list.forEach(p=>{authCounts[p.authType]=(authCounts[p.authType]||0)+1});
+  return `<div class="card"><h2>Providers (${list.length})</h2>
+    <div style="margin-bottom:16px;display:flex;gap:8px">
+      <span class="tag tag-blue">API Key: ${authCounts.apikey||0}</span>
+      <span class="tag tag-orange">OAuth: ${authCounts.oauth||0}</span>
+      <span class="tag tag-green">No Auth: ${authCounts.noauth||0}</span>
+    </div>
+    <input class="search-bar" placeholder="Search providers..." oninput="filterProv(this.value)">
+    <div class="provider-grid" id="prov-grid">${list.map(p=>`<div class="provider-item" data-n="${(p.name||'').toLowerCase()} ${(p.id||'').toLowerCase()}"><div class="provider-dot dot-${p.authType||'apikey'}"></div><div><strong>${p.name||p.id}</strong><br><span style="font-size:11px;color:var(--muted)">${p.id} · ${p.authType||'apikey'} · ${p.modelCount||0} models</span></div></div>`).join('')}</div></div>`;
+}
+
+function filterProv(q){document.querySelectorAll('.provider-item').forEach(el=>{el.style.display=el.dataset.n.includes(q.toLowerCase())?'':'none'})}
+
+async function renderModels(){
+  const m=await api('/api/v1/models');
+  let list=Array.isArray(m?.data)?m.data:[];
+  return `<div class="card"><h2>Models (${list.length})</h2>
+    <input class="search-bar" placeholder="Search models..." oninput="filterMod(this.value)">
+    <table><thead><tr><th>Model ID</th></tr></thead><tbody id="mtb">${list.slice(0,300).map(m=>`<tr data-n="${m.id.toLowerCase()}"><td><code>${m.id}</code></td></tr>`).join('')}</tbody></table>
+    ${list.length>300?`<p style="text-align:center;color:var(--muted);padding:12px">Showing 300 of ${list.length}</p>`:''}
+  </div>`;
+}
+
+function filterMod(q){document.querySelectorAll('#mtb tr').forEach(el=>{el.style.display=el.dataset.n.includes(q.toLowerCase())?'':'none'})}
+
+async function renderRoutes(){
+  const eps=[
+    ['POST','/api/v1/chat/completions','Chat completions'],
+    ['POST','/api/v1/responses','Responses API'],
+    ['POST','/api/v1/completions','Text completions'],
+    ['GET','/api/v1/models','List models'],
+    ['POST','/api/v1/embeddings','Embeddings'],
+    ['POST','/api/v1/images/generations','Image generation'],
+    ['POST','/api/v1/audio/speech','Text-to-speech'],
+    ['POST','/api/v1/audio/transcriptions','Transcription'],
+    ['POST','/api/v1/moderations','Moderation'],
+    ['POST','/api/v1/rerank','Rerank'],
+    ['POST','/api/v1/search','Web search'],
+    ['GET|POST','/api/v1/files','Files'],
+    ['GET|POST','/api/v1/batches','Batches'],
+    ['POST','/api/v1/messages','Anthropic messages'],
+    ['POST','/api/v1/ocr','OCR'],
+    ['GET','/api/auth/status','Auth status'],
+    ['POST','/api/auth/login','Login'],
+    ['POST','/api/auth/logout','Logout'],
+    ['GET','/api/providers/registry','All registered providers'],
+    ['GET|POST|PUT|DELETE','/api/providers','Provider connections'],
+    ['GET|POST|PUT|DELETE','/api/combos','Combos'],
+    ['GET|POST','/api/api-keys','API keys'],
+    ['GET|PUT','/api/settings','Settings'],
+    ['GET','/api/usage/analytics','Usage analytics'],
+    ['GET','/api/mcp/status','MCP status'],
+    ['GET','/api/mcp/tools','MCP tools'],
+    ['GET','/api/a2a/status','A2A status'],
+    ['GET','/health','Health check'],
+    ['GET','/.well-known/agent.json','Agent card'],
+  ];
+  return `<div class="card"><h2>API Endpoints</h2><div class="endpoint-list">${eps.map(([m,p,d])=>`<div class="endpoint"><span class="method">${m}</span> <span style="color:var(--muted)">${p}</span> ${d}</div>`).join('')}</div></div>`;
+}
+
+async function renderMCP(){
+  const r=await api('/api/mcp/tools');
+  let list=[];
+  if(r){list=Array.isArray(r.tools)?r.tools:(Array.isArray(r)?r:[])}
+  return `<div class="card"><h2>MCP Tools (${list.length})</h2><table><thead><tr><th>Name</th><th>Description</th></tr></thead><tbody>${list.map(t=>`<tr><td><code>${t.name||t}</code></td><td style="color:var(--muted)">${t.description||''}</td></tr>`).join('')}</tbody></table></div>`;
+}
+
+async function render(){
+  document.getElementById('nav').innerHTML=nav();
+  const app=document.getElementById('app');
+  if(!S.checked){app.innerHTML='<div class="loading">Loading...</div>';return}
+  if(S.bootstrap){app.innerHTML=renderSetup();return}
+  if(!S.auth){app.innerHTML=renderLogin();return}
+  app.innerHTML='<div class="loading">Loading...</div>';
+  try{
+    switch(S.tab){
+      case 'overview':app.innerHTML=await renderOverview();break;
+      case 'providers':app.innerHTML=await renderProviders();break;
+      case 'models':app.innerHTML=await renderModels();break;
+      case 'routes':app.innerHTML=await renderRoutes();break;
+      case 'mcp':app.innerHTML=await renderMCP();break;
+    }
+  }catch(e){app.innerHTML=`<div class="err-box">Error: ${e.message}\n\n${e.stack}</div>`}
+}
+
+checkAuth();
+</script>
+</body>
+</html>
