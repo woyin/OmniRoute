@@ -10,6 +10,17 @@ func RegisterOAuthProviders() {
 	RegisterWindsurf()
 	RegisterClaudeCode()
 	RegisterAntigravity()
+	RegisterClaude()
+	RegisterGitHub()
+	RegisterQwen()
+	RegisterGrokCLI()
+	RegisterKimiCoding()
+	RegisterCodebuddyCN()
+	RegisterAGY()
+	RegisterGitLabDuo()
+	RegisterDevinCLI()
+	RegisterAmazonQ()
+	RegisterZedHosted()
 }
 
 // RegisterCursor registers the Cursor OAuth provider.
@@ -141,5 +152,217 @@ func RegisterAntigravity() {
 			{ID: "gpt-5.5", Name: "GPT-5.5 (Antigravity)", ContextLength: 128000, SupportsReasoning: true},
 			{ID: "claude-opus-4-7", Name: "Claude Opus 4.7 (Antigravity)", ContextLength: 200000, TargetFormat: FormatClaude, SupportsReasoning: true},
 		},
+	})
+}
+
+// RegisterClaude registers the Claude (OAuth) provider.
+// Distinct from claude-code: this is the Claude.ai OAuth flow for direct API access.
+func RegisterClaude() {
+	Register(&RegistryEntry{
+		ID:        "claude",
+		Alias:     "cc",
+		Name:      "Claude (OAuth)",
+		Format:    FormatClaude,
+		Executor:  "default",
+		BaseURL:   "https://api.anthropic.com/v1",
+		ChatPath:  "/messages",
+		AuthType:  AuthTypeOAuth,
+		AuthHeader: "x-api-key",
+		DefaultContextLength: 200000,
+		Headers: map[string]string{
+			"anthropic-version": "2023-06-01",
+		},
+		Models: []RegistryModel{
+			{ID: "claude-opus-4-7", Name: "Claude Opus 4.7", SupportsReasoning: true, ContextLength: 200000},
+			{ID: "claude-sonnet-4-6", Name: "Claude Sonnet 4.6", SupportsReasoning: true, ContextLength: 200000},
+			{ID: "claude-sonnet-4-5", Name: "Claude Sonnet 4.5", SupportsReasoning: true, ContextLength: 200000},
+			{ID: "claude-haiku-4-5", Name: "Claude Haiku 4.5", ContextLength: 200000},
+		},
+	})
+}
+
+// RegisterGitHub registers the GitHub Copilot (OAuth) provider.
+// Distinct from github-copilot: uses the GitHub OAuth app flow directly.
+func RegisterGitHub() {
+	Register(&RegistryEntry{
+		ID:        "github",
+		Alias:     "gh",
+		Name:      "GitHub Copilot (OAuth)",
+		Format:    FormatOpenAI,
+		Executor:  "default",
+		BaseURL:   "https://api.githubcopilot.com",
+		ChatPath:  "/chat/completions",
+		AuthType:  AuthTypeOAuth,
+		AuthHeader: "Authorization",
+		AuthPrefix: "Bearer ",
+		DefaultContextLength: 128000,
+		Models: []RegistryModel{
+			{ID: "gpt-5.5", Name: "GPT-5.5 (GitHub)", ContextLength: 128000, SupportsReasoning: true},
+			{ID: "claude-sonnet-4-6", Name: "Claude Sonnet 4.6 (GitHub)", ContextLength: 200000, TargetFormat: FormatClaude, SupportsReasoning: true},
+		},
+	})
+}
+
+// RegisterQwen registers the Qwen Code OAuth provider.
+func RegisterQwen() {
+	Register(&RegistryEntry{
+		ID:        "qwen",
+		Alias:     "qw",
+		Name:      "Qwen Code",
+		Format:    FormatOpenAI,
+		Executor:  "default",
+		BaseURL:   "https://chat.qwen.ai/api/v1/services/aigc/text-generation/generation",
+		AuthType:  AuthTypeOAuth,
+		AuthHeader: "Authorization",
+		AuthPrefix: "Bearer ",
+		DefaultContextLength: 131072,
+		PassthroughModels: true,
+	})
+}
+
+// RegisterGrokCLI registers the Grok Build (CLI) OAuth provider.
+func RegisterGrokCLI() {
+	Register(&RegistryEntry{
+		ID:        "grok-cli",
+		Alias:     "gc",
+		Name:      "Grok Build",
+		Format:    FormatOpenAI,
+		Executor:  "default",
+		BaseURL:   "https://api.x.ai/v1",
+		ChatPath:  "/chat/completions",
+		AuthType:  AuthTypeOAuth,
+		AuthHeader: "Authorization",
+		AuthPrefix: "Bearer ",
+		DefaultContextLength: 131072,
+		Models: []RegistryModel{
+			{ID: "grok-4", Name: "Grok 4 (CLI)", ContextLength: 131072, SupportsReasoning: true},
+			{ID: "grok-3", Name: "Grok 3 (CLI)", ContextLength: 131072, SupportsReasoning: true},
+		},
+	})
+}
+
+// RegisterKimiCoding registers the Kimi Coding OAuth provider.
+func RegisterKimiCoding() {
+	Register(&RegistryEntry{
+		ID:        "kimi-coding",
+		Alias:     "kmc",
+		Name:      "Kimi Coding",
+		Format:    FormatOpenAI,
+		Executor:  "default",
+		BaseURL:   "https://api.kimi.com/coding/v1",
+		ChatPath:  "/chat/completions",
+		AuthType:  AuthTypeOAuth,
+		AuthHeader: "Authorization",
+		AuthPrefix: "Bearer ",
+		DefaultContextLength: 131072,
+		PassthroughModels: true,
+	})
+}
+
+// RegisterCodebuddyCN registers the CodeBuddy CN (Tencent) OAuth provider.
+func RegisterCodebuddyCN() {
+	Register(&RegistryEntry{
+		ID:        "codebuddy-cn",
+		Alias:     "cbcn",
+		Name:      "CodeBuddy CN",
+		Format:    FormatOpenAI,
+		Executor:  "default",
+		BaseURL:   "https://copilot.tencent.com/v2",
+		ChatPath:  "/chat/completions",
+		AuthType:  AuthTypeOAuth,
+		AuthHeader: "Authorization",
+		AuthPrefix: "Bearer ",
+		DefaultContextLength: 131072,
+		PassthroughModels: true,
+	})
+}
+
+// RegisterAGY registers the Antigravity CLI (AGY) OAuth provider.
+func RegisterAGY() {
+	Register(&RegistryEntry{
+		ID:        "agy",
+		Name:      "Antigravity CLI",
+		Format:    FormatOpenAI,
+		Executor:  "default",
+		BaseURL:   "https://api.antigravity.com/v1",
+		ChatPath:  "/chat/completions",
+		AuthType:  AuthTypeOAuth,
+		AuthHeader: "Authorization",
+		AuthPrefix: "Bearer ",
+		DefaultContextLength: 200000,
+		HasFree:   true,
+		PassthroughModels: true,
+	})
+}
+
+// RegisterGitLabDuo registers the GitLab Duo OAuth provider.
+func RegisterGitLabDuo() {
+	Register(&RegistryEntry{
+		ID:        "gitlab-duo",
+		Alias:     "gld",
+		Name:      "GitLab Duo",
+		Format:    FormatOpenAI,
+		Executor:  "default",
+		BaseURL:   "https://gitlab.com/api/v4",
+		ChatPath:  "/chat/completions",
+		AuthType:  AuthTypeOAuth,
+		AuthHeader: "Authorization",
+		AuthPrefix: "Bearer ",
+		DefaultContextLength: 128000,
+		PassthroughModels: true,
+	})
+}
+
+// RegisterDevinCLI registers the Devin CLI OAuth provider.
+func RegisterDevinCLI() {
+	Register(&RegistryEntry{
+		ID:        "devin-cli",
+		Alias:     "dv",
+		Name:      "Devin CLI",
+		Format:    FormatOpenAI,
+		Executor:  "default",
+		BaseURL:   "https://api.devin.ai/v1",
+		ChatPath:  "/chat/completions",
+		AuthType:  AuthTypeOAuth,
+		AuthHeader: "Authorization",
+		AuthPrefix: "Bearer ",
+		DefaultContextLength: 128000,
+		PassthroughModels: true,
+	})
+}
+
+// RegisterAmazonQ registers the Amazon Q OAuth provider.
+func RegisterAmazonQ() {
+	Register(&RegistryEntry{
+		ID:        "amazon-q",
+		Alias:     "aq",
+		Name:      "Amazon Q",
+		Format:    FormatOpenAI,
+		Executor:  "default",
+		BaseURL:   "https://q.us-east-1.amazonaws.com",
+		ChatPath:  "/chat/completions",
+		AuthType:  AuthTypeOAuth,
+		AuthHeader: "Authorization",
+		AuthPrefix: "Bearer ",
+		DefaultContextLength: 128000,
+		HasFree:   true,
+		PassthroughModels: true,
+	})
+}
+
+// RegisterZedHosted registers the Zed Hosted Models OAuth provider.
+func RegisterZedHosted() {
+	Register(&RegistryEntry{
+		ID:        "zed-hosted",
+		Name:      "Zed Hosted Models",
+		Format:    FormatOpenAI,
+		Executor:  "default",
+		BaseURL:   "https://cloud.zed.dev",
+		ChatPath:  "/completions",
+		AuthType:  AuthTypeOAuth,
+		AuthHeader: "Authorization",
+		AuthPrefix: "Bearer ",
+		DefaultContextLength: 200000,
+		PassthroughModels: true,
 	})
 }

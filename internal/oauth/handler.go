@@ -190,6 +190,7 @@ type tokenResponse struct {
 
 func getOAuthConfig(provider string) *oauthConfig {
 	configs := map[string]*oauthConfig{
+		// --- Existing providers ---
 		"cursor":        {AuthURL: "https://cursor.com/oauth/authorize", TokenURL: "https://cursor.com/oauth/token", Scope: "openid profile email", RedirectURI: "http://localhost:3456/api/oauth/callback"},
 		"kiro":          {AuthURL: "https://auth.kiro.dev/oauth/authorize", TokenURL: "https://auth.kiro.dev/oauth/token", Scope: "openid profile email", RedirectURI: "http://localhost:3456/api/oauth/callback"},
 		"github-copilot": {AuthURL: "https://github.com/login/oauth/authorize", TokenURL: "https://github.com/login/oauth/access_token", RedirectURI: "http://localhost:3456/api/oauth/callback"},
@@ -197,6 +198,23 @@ func getOAuthConfig(provider string) *oauthConfig {
 		"claude-code":   {AuthURL: "https://console.anthropic.com/oauth/authorize", TokenURL: "https://console.anthropic.com/oauth/token", Scope: "openid profile email", RedirectURI: "http://localhost:3456/api/oauth/callback"},
 		"antigravity":   {AuthURL: "https://api.antigravity.com/oauth/authorize", TokenURL: "https://api.antigravity.com/oauth/token", Scope: "openid profile email", RedirectURI: "http://localhost:3456/api/oauth/callback"},
 		"codex":         {AuthURL: "https://auth.openai.com/authorize", TokenURL: "https://auth.openai.com/oauth/token", Scope: "openid profile email", RedirectURI: "http://localhost:3456/api/oauth/callback"},
+		// --- Ported from main branch ---
+		"claude":        {AuthURL: "https://claude.ai/oauth/authorize", TokenURL: "https://api.anthropic.com/v1/oauth/token", Scope: "org:create_api_key user:profile user:inference user:sessions:claude_code user:mcp_servers", RedirectURI: "https://platform.claude.com/oauth/code/callback"},
+		"openai":        {AuthURL: "https://auth.openai.com/oauth/authorize", TokenURL: "https://auth.openai.com/oauth/token", Scope: "openid profile email offline_access", RedirectURI: "http://localhost:3456/api/oauth/callback"},
+		"github":        {AuthURL: "https://github.com/login/oauth/authorize", TokenURL: "https://github.com/login/oauth/access_token", Scope: "copilot", RedirectURI: "http://localhost:3456/api/oauth/callback"},
+		"qwen":          {AuthURL: "https://qwen.ai/api/v1/oauth2/device/code", TokenURL: "https://qwen.ai/api/v1/oauth2/token", Scope: "openid profile email model.completion", RedirectURI: "http://localhost:3456/api/oauth/callback"},
+		"grok-cli":      {AuthURL: "https://auth.x.ai/oauth2/authorize", TokenURL: "https://auth.x.ai/oauth2/token", Scope: "openid profile email", RedirectURI: "http://localhost:3456/api/oauth/callback"},
+		"kimi-coding":   {AuthURL: "https://auth.kimi.com/api/oauth/device_authorization", TokenURL: "https://auth.kimi.com/api/oauth/token", Scope: "openid profile email", RedirectURI: "http://localhost:3456/api/oauth/callback"},
+		"codebuddy-cn":  {AuthURL: "https://copilot.tencent.com/v2/plugin/auth/authorize", TokenURL: "https://copilot.tencent.com/v2/plugin/auth/token", Scope: "openid profile email", RedirectURI: "http://localhost:3456/api/oauth/callback"},
+		"cline":         {AuthURL: "https://api.cline.bot/api/v1/auth/authorize", TokenURL: "https://api.cline.bot/api/v1/auth/token", Scope: "openid profile email", RedirectURI: "http://localhost:3456/api/oauth/callback"},
+		"agy":           {AuthURL: "https://accounts.google.com/o/oauth2/v2/auth", TokenURL: "https://oauth2.googleapis.com/token", Scope: "https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile", RedirectURI: "http://localhost:3456/api/oauth/callback"},
+		"gitlab-duo":    {AuthURL: "https://gitlab.com/oauth/authorize", TokenURL: "https://gitlab.com/oauth/token", Scope: "ai_features read_user", RedirectURI: "http://localhost:3456/api/oauth/callback"},
+		"trae":          {AuthURL: "https://api.trae.ai/oauth/authorize", TokenURL: "https://api.trae.ai/oauth/token", Scope: "openid profile email", RedirectURI: "http://localhost:3456/api/oauth/callback"},
+		"zed":           {AuthURL: "https://oauth.zed.dev/authorize", TokenURL: "https://oauth.zed.dev/token", Scope: "openid profile email", RedirectURI: "http://localhost:3456/api/oauth/callback"},
+		"zed-hosted":    {AuthURL: "https://cloud.zed.dev/oauth/authorize", TokenURL: "https://cloud.zed.dev/oauth/token", Scope: "openid profile email", RedirectURI: "http://localhost:3456/api/oauth/callback"},
+		"kilocode":      {AuthURL: "https://auth.kilocode.ai/oauth/authorize", TokenURL: "https://auth.kilocode.ai/oauth/token", Scope: "openid profile email", RedirectURI: "http://localhost:3456/api/oauth/callback"},
+		"devin-cli":     {AuthURL: "https://app.devin.ai/oauth/authorize", TokenURL: "https://app.devin.ai/oauth/token", Scope: "openid profile email", RedirectURI: "http://localhost:3456/api/oauth/callback"},
+		"amazon-q":      {AuthURL: "https://auth.amazon.com/oauth/authorize", TokenURL: "https://auth.amazon.com/oauth/token", Scope: "openid profile email", RedirectURI: "http://localhost:3456/api/oauth/callback"},
 	}
 	cfg, ok := configs[provider]
 	if !ok { return nil }
