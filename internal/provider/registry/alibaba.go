@@ -28,3 +28,33 @@ func RegisterAlibaba() {
 		},
 	})
 }
+
+// RegisterAlibabaCN registers the Alibaba China (DashScope) provider.
+func RegisterAlibabaCN() {
+	Register(&RegistryEntry{
+		ID:                "alibaba-cn",
+		Alias:             "ali-cn",
+		Format:            FormatOpenAI,
+		Executor:          "default",
+		BaseURL:           "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+		ModelsURL:         "https://dashscope.aliyuncs.com/compatible-mode/v1/models",
+		AuthType:          AuthTypeAPIKey,
+		AuthHeader:        "Authorization",
+		AuthPrefix:        "Bearer ",
+		PassthroughModels: true,
+		Models: []RegistryModel{
+			{ID: "qwen-max", Name: "Qwen Max"},
+			{ID: "qwen-max-2025-01-25", Name: "Qwen Max (2025-01-25)"},
+			{ID: "qwen-plus", Name: "Qwen Plus"},
+			{ID: "qwen-plus-2025-07-14", Name: "Qwen Plus (2025-07-14)"},
+			{ID: "qwen-turbo", Name: "Qwen Turbo"},
+			{ID: "qwen-turbo-2025-11-01", Name: "Qwen Turbo (2025-11-01)"},
+			{ID: "qwen3-coder-plus", Name: "Qwen3 Coder Plus"},
+			{ID: "qwen3-coder-flash", Name: "Qwen3 Coder Flash"},
+			{ID: "qwq-plus", Name: "QwQ Plus (Reasoning)"},
+			{ID: "qwq-32b", Name: "QwQ 32B"},
+			{ID: "qwen3-32b", Name: "Qwen3 32B"},
+			{ID: "qwen3-235b-a22b", Name: "Qwen3 235B A22B"},
+		},
+	})
+}

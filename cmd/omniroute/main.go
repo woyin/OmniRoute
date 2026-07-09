@@ -22,6 +22,7 @@ import (
 	"github.com/omniroute/omniroute/internal/oauth"
 	"github.com/omniroute/omniroute/internal/mcp"
 	"github.com/omniroute/omniroute/internal/auth"
+	"github.com/omniroute/omniroute/internal/management"
 	"github.com/omniroute/omniroute/internal/provider/registry"
 )
 
@@ -56,11 +57,6 @@ func main() {
 		os.Exit(0)
 	}
 
-	if mcpMode {
-		log.Println("[MCP] MCP server mode not yet implemented in Go rewrite")
-		os.Exit(1)
-	}
-
 	cfg := config.Load()
 	if portFlag > 0 {
 		cfg.Port = portFlag
@@ -68,6 +64,19 @@ func main() {
 	if dataDir != "" {
 		cfg.DataDir = dataDir
 		cfg.SQLiteFile = dataDir + "/storage.sqlite"
+	}
+
+	if mcpMode {
+		registry.RegisterBuiltinProviders()
+		log.Printf("[MCP] Registered %d providers", len(registry.List()))
+		dbConn, err := db.GetDB(cfg)
+		if err != nil {
+			log.Fatalf("[MCP] Database initialization failed: %v", err)
+		}
+		mcpServer := mcp.NewMCPServer(dbConn)
+		log.Printf("[MCP] Starting stdio transport with %d tools", len(mcpServer.Tools()))
+		mcpServer.StartStdio()
+		return
 	}
 
 	log.Printf("[OmniRoute] v%s starting on port %d", version, cfg.Port)
@@ -90,6 +99,28 @@ func main() {
 	// Initialize OAuth handler
 	oauthHandler := oauth.NewOAuthHandler(dbConn)
 
+	// Initialize management handlers (DB-backed)
+	mgmtResilience := &management.ResilienceHandler{DB: dbConn}
+	mgmtCache := &management.CacheHandler{DB: dbConn}
+	mgmtSessions := &management.SessionsHandler{DB: dbConn}
+	mgmtRateLimit := &management.RateLimitHandler{DB: dbConn}
+	mgmtUpstreamProxy := &management.UpstreamProxyHandler{DB: dbConn}
+	mgmtPricing := &management.PricingHandler{DB: dbConn}
+	mgmtCompression := &management.CompressionHandler{DB: dbConn}
+	mgmtMonitoring := &management.MonitoringHandler{DB: dbConn, DataDir: cfg.DataDir}
+	mgmtLogs := &management.LogsHandler{DB: dbConn}
+	mgmtGuardrails := &management.GuardrailsHandler{DB: dbConn}
+	mgmtTelemetry := &management.TelemetryHandler{DB: dbConn}
+	mgmtAnalytics := &management.AnalyticsHandler{DB: dbConn}
+	mgmtTunnels := &management.TunnelHandler{DataDir: cfg.DataDir}
+	mgmtPlugins := &management.PluginsHandler{DB: dbConn}
+	mgmtEvals := &management.EvalsHandler{DB: dbConn}
+	mgmtDBBackups := &management.DBBackupsHandler{DB: dbConn, DataDir: cfg.DataDir, DBPath: cfg.SQLiteFile}
+
+	// Rate limiters for API and management routes
+	rlV1 := middleware.NewRateLimiter(100, 200)   // 100 req/s, burst 200 for v1 proxy routes
+	rlMgmt := middleware.NewRateLimiter(50, 100)   // 50 req/s, burst 100 for management routes
+
 	r := chi.NewRouter()
 	r.Use(chimw.RequestID)
 	r.Use(chimw.RealIP)
@@ -108,6 +139,8 @@ func main() {
 
 	// Management routes (no auth required for initial setup)
 	r.Route("/api", func(r chi.Router) {
+		r.Use(middleware.RateLimitMiddleware(rlMgmt))
+
 		// Auth management
 		r.Get("/auth/require-login", (&auth.RequireLoginHandler{DB: dbConn}).ServeHTTP)
 		r.Post("/auth/require-login", (&auth.RequireLoginHandler{DB: dbConn}).ServeHTTP)
@@ -146,12 +179,18 @@ func main() {
 			r.Get("/settings", (&handler.SettingsHandler{DB: dbConn}).ServeHTTP)
 			r.Put("/settings", (&handler.SettingsHandler{DB: dbConn}).ServeHTTP)
 
+			// Settings sub-routes (stub handlers)
+			registerSettingsRoutes(r, dbConn)
+
 			// Usage & analytics
 			r.Get("/usage/analytics", (&handler.UsageHandler{DB: dbConn}).ServeHTTP)
 			r.Get("/usage/history", (&handler.UsageHistoryHandler{DB: dbConn}).ServeHTTP)
 			r.Get("/usage/logs", (&handler.CallLogsHandler{DB: dbConn}).ServeHTTP)
 			r.Get("/token-health", (&handler.TokenHealthHandler{DB: dbConn}).ServeHTTP)
 			r.Get("/usage/provider-limits", (&handler.ProviderLimitsHandler{DB: dbConn}).ServeHTTP)
+
+			// Extended usage routes
+			registerUsageRoutes(r, dbConn)
 
 			// DB health
 			r.Get("/db/health", (&handler.DBHealthHandler{DB: dbConn}).ServeHTTP)
@@ -163,6 +202,15 @@ func main() {
 			// Init
 			r.Post("/init", (&handler.InitHandler{DB: dbConn}).ServeHTTP)
 		})
+
+		// Extended providers routes (auth imports, health, bulk ops, etc.)
+		registerProvidersExtendedRoutes(r, dbConn)
+
+		// CLI tools management routes (settings, config, runtime, etc.)
+		registerCLIToolsRoutes(r, dbConn)
+
+		// Scattered misc routes (auth, models, plugins, webhooks, etc.)
+		registerMiscRoutes(r, dbConn)
 
 		// Public management routes
 		r.Get("/free-models", freeModelsHandler())
@@ -201,34 +249,34 @@ func main() {
 		r.Post("/oauth/kiro/auto-import", oauthHandler.HandleCLIProxyImport)
 
 		// Cache management routes
-		r.Get("/cache", cacheStatusHandler(dbConn))
-		r.Delete("/cache", cacheFlushHandler(dbConn))
-		r.Get("/cache/stats", cacheStatsHandler(dbConn))
-		r.Get("/cache/entries", cacheEntriesHandler(dbConn))
-		r.Get("/cache/reasoning", cacheReasoningHandler(dbConn))
+		r.Get("/cache", mgmtCache.Status)
+		r.Delete("/cache", mgmtCache.Flush)
+		r.Get("/cache/stats", mgmtCache.Stats)
+		r.Get("/cache/entries", mgmtCache.Entries)
+		r.Get("/cache/reasoning", mgmtCache.Reasoning)
 
 		// Guardrails routes
-		r.Get("/guardrails", guardrailsListHandler(dbConn))
-		r.Post("/guardrails", guardrailsCreateHandler(dbConn))
-		r.Post("/guardrails/test", guardrailsTestHandler())
+		r.Get("/guardrails", mgmtGuardrails.List)
+		r.Post("/guardrails", mgmtGuardrails.Create)
+		r.Post("/guardrails/test", mgmtGuardrails.Test)
 
 		// Fallback chains
-		r.Get("/fallback/chains", fallbackChainsListHandler(dbConn))
-		r.Post("/fallback/chains", fallbackChainsCreateHandler(dbConn))
+		r.Get("/fallback/chains", mgmtResilience.FallbackChainsList)
+		r.Post("/fallback/chains", mgmtResilience.FallbackChainsCreate)
 
 		// Compression routes
-		r.Get("/compression/engines", compressionEnginesHandler())
-		r.Post("/compression/preview", compressionPreviewHandler())
-		r.Get("/compression/compare", compressionCompareHandler())
+		r.Get("/compression/engines", mgmtCompression.Engines)
+		r.Post("/compression/preview", mgmtCompression.Preview)
+		r.Get("/compression/compare", mgmtCompression.Compare)
 		r.Get("/compression/language-packs", compressionLanguagePacksHandler())
 		r.Get("/compression/rules", compressionRulesHandler())
 
 		// Context / compression combos
-		r.Get("/context/combos", compressionCombosListHandler(dbConn))
-		r.Post("/context/combos", compressionCombosCreateHandler(dbConn))
-		r.Get("/context/analytics", contextAnalyticsHandler())
-		r.Get("/context/rtk/config", contextRTKConfigHandler())
-		r.Get("/context/rtk/filters", contextRTKFiltersHandler())
+		r.Get("/context/combos", mgmtCompression.CombosList)
+		r.Post("/context/combos", mgmtCompression.CombosCreate)
+		r.Get("/context/analytics", mgmtCompression.ContextAnalytics)
+		r.Get("/context/rtk/config", mgmtCompression.RTKConfig)
+		r.Get("/context/rtk/filters", mgmtCompression.RTKFilters)
 
 		// Provider nodes
 		r.Get("/provider-nodes", providerNodesListHandler(dbConn))
@@ -248,17 +296,17 @@ func main() {
 		r.Post("/version-manager/stop", versionManagerStopHandler())
 
 		// DB backups
-		r.Get("/db-backups", dbBackupsListHandler())
-		r.Post("/db-backups/export", dbBackupsExportHandler(dbConn))
-		r.Get("/db-backups/exportAll", dbBackupsExportAllHandler(dbConn))
-		r.Post("/db-backups/import", dbBackupsImportHandler(dbConn))
+		r.Get("/db-backups", mgmtDBBackups.List)
+		r.Post("/db-backups/export", mgmtDBBackups.Export)
+		r.Get("/db-backups/exportAll", mgmtDBBackups.ExportAll)
+		r.Post("/db-backups/import", mgmtDBBackups.Import)
 
 		// Tunnels
-		r.Get("/tunnels/cloudflared", tunnelsCloudflaredHandler())
-		r.Get("/tunnels/ngrok", tunnelsNgrokHandler())
-		r.Post("/tunnels/tailscale/enable", tunnelsTailscaleEnableHandler())
-		r.Post("/tunnels/tailscale/disable", tunnelsTailscaleDisableHandler())
-		r.Get("/tunnels/tailscale/status", tunnelsTailscaleStatusHandler())
+		r.Get("/tunnels/cloudflared", mgmtTunnels.CloudflaredStatus)
+		r.Get("/tunnels/ngrok", mgmtTunnels.NgrokStatus)
+		r.Post("/tunnels/tailscale/enable", mgmtTunnels.TailscaleEnable)
+		r.Post("/tunnels/tailscale/disable", mgmtTunnels.TailscaleDisable)
+		r.Get("/tunnels/tailscale/status", mgmtTunnels.TailscaleStatus)
 
 		// Discovery
 		r.Post("/discovery/scan", discoveryScanHandler())
@@ -267,31 +315,31 @@ func main() {
 		r.Post("/discovery/verify/{id}", discoveryVerifyHandler())
 
 		// Resilience
-		r.Get("/resilience", resilienceStatusHandler(dbConn))
-		r.Get("/resilience/circuit-breakers", circuitBreakersListHandler(dbConn))
-		r.Post("/resilience/circuit-breakers/{id}/reset", circuitBreakerResetHandler(dbConn))
+		r.Get("/resilience", mgmtResilience.Status)
+		r.Get("/resilience/circuit-breakers", mgmtResilience.CircuitBreakersList)
+		r.Post("/resilience/circuit-breakers/{id}/reset", mgmtResilience.CircuitBreakerReset)
 
 		// Sessions
-		r.Get("/sessions", sessionsListHandler())
-		r.Delete("/sessions/{id}", sessionsDeleteHandler())
+		r.Get("/sessions", mgmtSessions.List)
+		r.Delete("/sessions/{id}", mgmtSessions.Delete)
 
 		// Rate limits
-		r.Get("/rate-limits", rateLimitsListHandler())
-		r.Post("/rate-limits", rateLimitsCreateHandler())
+		r.Get("/rate-limits", mgmtRateLimit.List)
+		r.Post("/rate-limits", mgmtRateLimit.Create)
 
 		// Upstream proxy
-		r.Get("/upstream-proxy", upstreamProxyListHandler(dbConn))
-		r.Post("/upstream-proxy", upstreamProxyCreateHandler(dbConn))
-		r.Get("/upstream-proxy/{providerId}", upstreamProxyGetHandler(dbConn))
-		r.Delete("/upstream-proxy/{providerId}", upstreamProxyDeleteHandler(dbConn))
+		r.Get("/upstream-proxy", mgmtUpstreamProxy.List)
+		r.Post("/upstream-proxy", mgmtUpstreamProxy.Create)
+		r.Get("/upstream-proxy/{providerId}", mgmtUpstreamProxy.Get)
+		r.Delete("/upstream-proxy/{providerId}", mgmtUpstreamProxy.Delete)
 
 		// Plugins
-		r.Get("/plugins", pluginsListHandler())
-		r.Post("/plugins/install", pluginsInstallHandler())
+		r.Get("/plugins", mgmtPlugins.List)
+		r.Post("/plugins/install", mgmtPlugins.Install)
 
 		// Evals
-		r.Get("/evals", evalsListHandler())
-		r.Get("/evals/suites", evalsSuitesHandler())
+		r.Get("/evals", mgmtEvals.List)
+		r.Get("/evals/suites", mgmtEvals.Suites)
 
 		// Cloud agents
 		r.Get("/cloud/auth", cloudAuthHandler())
@@ -306,20 +354,20 @@ func main() {
 		r.Get("/compliance/audit-log", complianceAuditLogHandler())
 
 		// Monitoring
-		r.Get("/monitoring/health", monitoringHealthHandler())
-		r.Get("/health/degradation", healthDegradationHandler())
+		r.Get("/monitoring/health", mgmtMonitoring.Health)
+		r.Get("/health/degradation", mgmtMonitoring.Degradation)
 
 		// Network info
-		r.Get("/network/info", networkInfoHandler())
+		r.Get("/network/info", mgmtMonitoring.NetworkInfo)
 
 		// Storage health
-		r.Get("/storage/health", storageHealthHandler())
+		r.Get("/storage/health", mgmtMonitoring.StorageHealth)
 
 		// Tags
 		r.Get("/tags", tagsListHandler())
 
 		// Telemetry
-		r.Get("/telemetry/summary", telemetrySummaryHandler())
+		r.Get("/telemetry/summary", mgmtTelemetry.Summary)
 
 		// Intelligence sync
 		r.Post("/intelligence/sync", intelligenceSyncHandler())
@@ -346,7 +394,7 @@ func main() {
 		r.Post("/sync/initialize", syncInitializeHandler())
 
 		// Search (management)
-		r.Get("/search/analytics", searchAnalyticsHandler())
+		r.Get("/search/analytics", mgmtAnalytics.AutoRouting)
 
 		// Translator
 		r.Post("/translator/translate", translatorTranslateHandler())
@@ -390,10 +438,10 @@ func main() {
 		r.Get("/keys/groups/{id}/permissions", keyGroupsPermissionsHandler(dbConn))
 
 		// Pricing routes
-		r.Get("/pricing", pricingListHandler(dbConn))
-		r.Get("/pricing/defaults", pricingDefaultsHandler())
-		r.Get("/pricing/models", pricingModelsHandler(dbConn))
-		r.Post("/pricing/sync", pricingSyncHandler())
+		r.Get("/pricing", mgmtPricing.List)
+		r.Get("/pricing/defaults", mgmtPricing.Defaults)
+		r.Get("/pricing/models", mgmtPricing.Models)
+		r.Post("/pricing/sync", mgmtPricing.Sync)
 
 		// Relay tokens
 		r.Get("/relay/tokens", relayTokensListHandler(dbConn))
@@ -497,17 +545,17 @@ func main() {
 		r.Post("/internal/codex-responses-ws", internalCodexResponsesWSHandler())
 
 		// Logs
-		r.Get("/logs", logsListHandler(dbConn))
-		r.Get("/logs/{id}", logsDetailHandler(dbConn))
-		r.Get("/logs/console", logsConsoleHandler())
-		r.Get("/logs/detail", logsListHandler(dbConn))
-		r.Post("/logs/export", logsExportHandler(dbConn))
+		r.Get("/logs", mgmtLogs.List)
+		r.Get("/logs/{id}", mgmtLogs.Detail)
+		r.Get("/logs/console", mgmtLogs.Console)
+		r.Get("/logs/detail", mgmtLogs.List)
+		r.Post("/logs/export", mgmtLogs.Export)
 
 		// Rate limit (singular, matches main branch)
-		r.Get("/rate-limit", rateLimitHandler())
+		r.Get("/rate-limit", mgmtRateLimit.GetConfig)
 
 		// MCP audit stats
-		r.Get("/mcp/audit/stats", mcpAuditStatsHandler(nil))
+		r.Get("/mcp/audit/stats", mcpAuditStatsHandler(dbConn))
 
 		// Restart
 		r.Post("/restart", restartHandler())
@@ -522,9 +570,9 @@ func main() {
 		r.Get("/cli/tokens/{id}", cliTokenDetailHandler(dbConn))
 
 		// Analytics
-		r.Get("/analytics/auto-routing", analyticsAutoRoutingHandler(dbConn))
-		r.Get("/analytics/compression", analyticsCompressionHandler(dbConn))
-		r.Get("/analytics/diversity", analyticsDiversityHandler(dbConn))
+		r.Get("/analytics/auto-routing", mgmtAnalytics.AutoRouting)
+		r.Get("/analytics/compression", mgmtAnalytics.Compression)
+		r.Get("/analytics/diversity", mgmtAnalytics.Diversity)
 
 		// Codex connect
 		r.Get("/codex/connect/{token}", codexConnectHandler(dbConn))
@@ -587,6 +635,8 @@ func main() {
 		} else {
 			r.Use(auth.OptionalAPIKey(dbConn))
 		}
+		r.Use(middleware.RateLimitMiddleware(rlV1))
+		r.Use(middleware.PromptInjectionGuard)
 		// Chat / Responses
 		r.Post("/chat/completions", (&handler.ChatHandler{DB: dbConn, Config: cfg}).ServeHTTP)
 		r.Post("/responses", (&handler.ChatHandler{DB: dbConn, Config: cfg}).ServeHTTP)

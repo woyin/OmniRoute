@@ -8,35 +8,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// --- Analytics handlers ---
-
-func analyticsAutoRoutingHandler(dbConn *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"totalRoutes": 0, "autoRoutes": 0, "manualRoutes": 0,
-		})
-	}
-}
-
-func analyticsCompressionHandler(dbConn *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"totalRequests": 0, "totalSaved": 0, "avgSavingsPercent": 0.0,
-		})
-	}
-}
-
-func analyticsDiversityHandler(dbConn *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"providerDiversity": 0.0, "modelDiversity": 0.0,
-		})
-	}
-}
-
 // --- Codex connect handler ---
 
 func codexConnectHandler(dbConn *sql.DB) http.HandlerFunc {

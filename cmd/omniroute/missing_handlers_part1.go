@@ -151,47 +151,37 @@ func keyGroupsPermissionsHandler(dbConn *sql.DB) http.HandlerFunc {
 	}
 }
 
-// --- Pricing handlers ---
-
-func pricingListHandler(dbConn *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"object": "list", "data": []interface{}{}})
-	}
-}
-
-func pricingDefaultsHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"defaults": map[string]interface{}{
-				"inputPricePer1k":  0.01,
-				"outputPricePer1k": 0.03,
-			},
-		})
-	}
-}
-
-func pricingModelsHandler(dbConn *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"object": "list", "data": []interface{}{}})
-	}
-}
-
-func pricingSyncHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"synced": true, "modelsUpdated": 0})
-	}
-}
-
 // --- Relay tokens handlers ---
 
 func relayTokensListHandler(dbConn *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		type relayToken struct {
+			ID       string `json:"id"`
+			Token    string `json:"token"`
+			Provider string `json:"provider"`
+			Model    string `json:"model"`
+			IsActive bool   `json:"isActive"`
+		}
+		var tokens []relayToken
+		if dbConn != nil {
+			rows, err := dbConn.Query("SELECT id, token, provider, model, is_active FROM relay_tokens ORDER BY created_at DESC")
+			if err == nil {
+				defer rows.Close()
+				for rows.Next() {
+					var t relayToken
+					var active int
+					if rows.Scan(&t.ID, &t.Token, &t.Provider, &t.Model, &active) == nil {
+						t.IsActive = active == 1
+						tokens = append(tokens, t)
+					}
+				}
+			}
+		}
+		if tokens == nil {
+			tokens = []relayToken{}
+		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"object": "list", "data": []interface{}{}})
+		json.NewEncoder(w).Encode(map[string]interface{}{"object": "list", "data": tokens})
 	}
 }
 
@@ -199,18 +189,23 @@ func relayTokenDetailHandler(dbConn *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
 		w.Header().Set("Content-Type", "application/json")
+		if dbConn != nil {
+			var token, provider, model string
+			var isActive int
+			err := dbConn.QueryRow("SELECT token, provider, model, is_active FROM relay_tokens WHERE id = ?", id).
+				Scan(&token, &provider, &model, &isActive)
+			if err == nil {
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"id": id, "token": token, "provider": provider, "model": model, "isActive": isActive == 1,
+				})
+				return
+			}
+		}
 		json.NewEncoder(w).Encode(map[string]interface{}{"id": id})
 	}
 }
 
 // --- Routing decision handlers ---
-
-func routingDecisionsHandler(dbConn *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"object": "list", "data": []interface{}{}})
-	}
-}
 
 func routingDecisionDetailHandler(dbConn *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

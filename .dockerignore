@@ -1,0 +1,12 @@
+Dockerfile
+.dockerignore
+.git/
+.gitignore
+*.md
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+tmp_*.txt
+compare_*.txt
+.go_providers.txt
+.tmp_extract_main.sh

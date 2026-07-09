@@ -33,125 +33,7 @@ func a2aTaskGetHandler(dbConn *sql.DB) http.HandlerFunc {
 	}
 }
 
-// --- Cache handlers ---
-
-func cacheStatusHandler(dbConn *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"enabled": true, "entries": 0, "hitRate": 0, "mode": "semantic"})
-	}
-}
-
-func cacheFlushHandler(dbConn *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		flushed := 0
-		if dbConn != nil {
-			res, err := dbConn.Exec("DELETE FROM semantic_cache")
-			if err == nil { n, _ := res.RowsAffected(); flushed = int(n) }
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "flushed": flushed})
-	}
-}
-
-func cacheStatsHandler(dbConn *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		entries := 0
-		if dbConn != nil { dbConn.QueryRow("SELECT COUNT(*) FROM semantic_cache").Scan(&entries) }
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"entries": entries, "hitRate": 0, "missRate": 1.0})
-	}
-}
-
-func cacheEntriesHandler(dbConn *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"object": "list", "data": []interface{}{}})
-	}
-}
-
-func cacheReasoningHandler(dbConn *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"object": "list", "data": []interface{}{}})
-	}
-}
-
-// --- Guardrails handlers ---
-
-func guardrailsListHandler(dbConn *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"guardrails": []map[string]interface{}{
-				{"name": "pii-masker", "type": "pii", "enabled": false, "description": "PII masking guardrail"},
-				{"name": "prompt-injection", "type": "security", "enabled": true, "description": "Prompt injection detection"},
-				{"name": "vision-bridge", "type": "content", "enabled": false, "description": "Vision content bridge"},
-			},
-		})
-	}
-}
-
-func guardrailsCreateHandler(dbConn *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		var body map[string]interface{}
-		json.NewDecoder(r.Body).Decode(&body)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
-	}
-}
-
-func guardrailsTestHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"blocked": false, "results": []interface{}{}})
-	}
-}
-
-// --- Fallback chain handlers ---
-
-func fallbackChainsListHandler(dbConn *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"chains": []interface{}{}})
-	}
-}
-
-func fallbackChainsCreateHandler(dbConn *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
-	}
-}
-
-// --- Compression handlers ---
-
-func compressionEnginesHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"engines": []map[string]interface{}{
-				{"id": "lite", "name": "Lite Compression", "savings": "10-15%"},
-				{"id": "caveman", "name": "Caveman Compression", "savings": "20-30%"},
-				{"id": "rtk", "name": "RTK Compression", "savings": "30-50%"},
-			},
-		})
-	}
-}
-
-func compressionPreviewHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"preview": true, "savings": "0%"})
-	}
-}
-
-func compressionCompareHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"comparison": []interface{}{}})
-	}
-}
+// --- Compression stubs (no management equivalent) ---
 
 func compressionLanguagePacksHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -164,43 +46,6 @@ func compressionRulesHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{"rules": []interface{}{}})
-	}
-}
-
-// --- Context / compression combo handlers ---
-
-func compressionCombosListHandler(dbConn *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"combos": []interface{}{}})
-	}
-}
-
-func compressionCombosCreateHandler(dbConn *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
-	}
-}
-
-func contextAnalyticsHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"analytics": map[string]interface{}{}})
-	}
-}
-
-func contextRTKConfigHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"config": map[string]interface{}{}})
-	}
-}
-
-func contextRTKFiltersHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"filters": []interface{}{}})
 	}
 }
 
@@ -287,73 +132,6 @@ func versionManagerStopHandler() http.HandlerFunc {
 	}
 }
 
-// --- DB backup handlers ---
-
-func dbBackupsListHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"backups": []interface{}{}})
-	}
-}
-
-func dbBackupsExportHandler(dbConn *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "message": "Export initiated"})
-	}
-}
-
-func dbBackupsExportAllHandler(dbConn *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "message": "Full export initiated"})
-	}
-}
-
-func dbBackupsImportHandler(dbConn *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "message": "Import initiated"})
-	}
-}
-
-// --- Tunnel handlers ---
-
-func tunnelsCloudflaredHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"active": false, "url": ""})
-	}
-}
-
-func tunnelsNgrokHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"active": false, "url": ""})
-	}
-}
-
-func tunnelsTailscaleEnableHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
-	}
-}
-
-func tunnelsTailscaleDisableHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
-	}
-}
-
-func tunnelsTailscaleStatusHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"active": false})
-	}
-}
-
 // --- Discovery handlers ---
 
 func discoveryScanHandler() http.HandlerFunc {
@@ -381,126 +159,6 @@ func discoveryVerifyHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
-	}
-}
-
-// --- Resilience handlers ---
-
-func resilienceStatusHandler(dbConn *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"layers": []string{"circuit-breaker", "fallback", "retry"},
-			"healthy": true,
-		})
-	}
-}
-
-func circuitBreakersListHandler(dbConn *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"breakers": []interface{}{}})
-	}
-}
-
-func circuitBreakerResetHandler(dbConn *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
-	}
-}
-
-// --- Session handlers ---
-
-func sessionsListHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"sessions": []interface{}{}})
-	}
-}
-
-func sessionsDeleteHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
-	}
-}
-
-// --- Rate limit handlers ---
-
-func rateLimitsListHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"limits": []interface{}{}})
-	}
-}
-
-func rateLimitsCreateHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
-	}
-}
-
-// --- Upstream proxy handlers ---
-
-func upstreamProxyListHandler(dbConn *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"proxies": []interface{}{}})
-	}
-}
-
-func upstreamProxyCreateHandler(dbConn *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
-	}
-}
-
-func upstreamProxyGetHandler(dbConn *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{})
-	}
-}
-
-func upstreamProxyDeleteHandler(dbConn *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
-	}
-}
-
-// --- Plugin handlers ---
-
-func pluginsListHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"plugins": []interface{}{}, "total": 0})
-	}
-}
-
-func pluginsInstallHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
-	}
-}
-
-// --- Eval handlers ---
-
-func evalsListHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"evals": []interface{}{}})
-	}
-}
-
-func evalsSuitesHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"suites": []interface{}{}})
 	}
 }
 
@@ -552,55 +210,12 @@ func complianceAuditLogHandler() http.HandlerFunc {
 	}
 }
 
-// --- Monitoring ---
-
-func monitoringHealthHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"status": "healthy", "checks": map[string]interface{}{"db": "ok", "disk": "ok"}})
-	}
-}
-
-func healthDegradationHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"degraded": false, "issues": []interface{}{}})
-	}
-}
-
-// --- Network ---
-
-func networkInfoHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"hostname": "", "ip": "", "port": 3456})
-	}
-}
-
-// --- Storage ---
-
-func storageHealthHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"status": "ok", "usage": map[string]interface{}{"percent": 0}})
-	}
-}
-
 // --- Tags ---
 
 func tagsListHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{"tags": []interface{}{}})
-	}
-}
-
-// --- Telemetry ---
-
-func telemetrySummaryHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"requests": 0, "tokens": 0, "errors": 0})
 	}
 }
 
@@ -700,15 +315,6 @@ func syncInitializeHandler() http.HandlerFunc {
 	}
 }
 
-// --- Search analytics ---
-
-func searchAnalyticsHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"totalSearches": 0, "topQueries": []interface{}{}})
-	}
-}
-
 // --- Translator ---
 
 func translatorTranslateHandler() http.HandlerFunc {
@@ -745,13 +351,13 @@ func registryProvidersHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		entries := registry.List()
 		type providerInfo struct {
-			ID           string `json:"id"`
-			Name         string `json:"name"`
-			AuthType     string `json:"authType"`
-			Format       string `json:"format"`
-			ModelCount   int    `json:"modelCount"`
-			HasFree      bool   `json:"hasFree"`
-			BaseURL      string `json:"baseUrl,omitempty"`
+			ID         string `json:"id"`
+			Name       string `json:"name"`
+			AuthType   string `json:"authType"`
+			Format     string `json:"format"`
+			ModelCount int    `json:"modelCount"`
+			HasFree    bool   `json:"hasFree"`
+			BaseURL    string `json:"baseUrl,omitempty"`
 		}
 		var list []providerInfo
 		for _, e := range entries {

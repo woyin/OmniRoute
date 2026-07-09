@@ -15,6 +15,7 @@ func RegisterOAuthProviders() {
 	RegisterQwen()
 	RegisterGrokCLI()
 	RegisterKimiCoding()
+	RegisterKilocode()
 	RegisterCodebuddyCN()
 	RegisterAGY()
 	RegisterGitLabDuo()
@@ -59,22 +60,42 @@ func RegisterKiro() {
 	})
 }
 
-// RegisterQoder registers the Qoder free/OAuth provider.
+// RegisterQoder registers the Qoder OAuth provider.
 func RegisterQoder() {
 	Register(&RegistryEntry{
-		ID:     "qoder",
-		Name:   "Qoder AI",
-		Format: FormatOpenAI,
-		Executor: "default",
-		BaseURL: "https://api.qoder.ai/v1",
+		ID:       "qoder",
+		Alias:    "if",
+		Name:     "Qoder AI",
+		Format:   FormatOpenAI,
+		Executor: "qoder",
+		BaseURL:  "https://api.qoder.com/v1",
 		ChatPath: "/chat/completions",
 		AuthType: AuthTypeOAuth,
+		AuthHeader: "Authorization",
+		AuthPrefix: "Bearer ",
 		DefaultContextLength: 131072,
 		PassthroughModels: true,
-		HasFree: true,
+		OAuth: &OAuthConfig{
+			ClientIDEnv:     "QODER_OAUTH_CLIENT_ID",
+			ClientSecretEnv: "QODER_OAUTH_CLIENT_SECRET",
+		},
 		Models: []RegistryModel{
-			{ID: "deepseek-v4-pro", Name: "DeepSeek V4 Pro (Qoder)", ContextLength: 131072, SupportsReasoning: true},
-			{ID: "gpt-5.4", Name: "GPT-5.4 (Qoder)", ContextLength: 128000},
+			{ID: "qoder-rome-30ba3b", Name: "Qoder ROME (Qoder)", ContextLength: 131072},
+			{ID: "glm-5.2", Name: "GLM-5.2 (Qoder)", ContextLength: 131072},
+			{ID: "minimax-m3", Name: "MiniMax M3 (Qoder)", ContextLength: 131072, SupportsVision: true},
+			{ID: "qwen3-coder-plus", Name: "Qwen3 Coder Plus (Qoder)", ContextLength: 131072},
+			{ID: "qwen3-max", Name: "Qwen3 Max (Qoder)", ContextLength: 131072},
+			{ID: "qwen3-vl-plus", Name: "Qwen3 Vision Plus (Qoder)", ContextLength: 131072, SupportsVision: true},
+			{ID: "kimi-k2-0905", Name: "Kimi K2 0905 (Qoder)", ContextLength: 131072},
+			{ID: "qwen3-max-preview", Name: "Qwen3 Max Preview (Qoder)", ContextLength: 131072},
+			{ID: "kimi-k2", Name: "Kimi K2 (Qoder)", ContextLength: 131072},
+			{ID: "deepseek-v3.2", Name: "DeepSeek-V3.2-Exp (Qoder)", ContextLength: 131072},
+			{ID: "deepseek-r1", Name: "DeepSeek R1 (Qoder)", ContextLength: 131072, SupportsReasoning: true},
+			{ID: "deepseek-v3", Name: "DeepSeek V3 (Qoder)", ContextLength: 131072},
+			{ID: "qwen3-32b", Name: "Qwen3 32B (Qoder)", ContextLength: 131072},
+			{ID: "qwen3-235b-a22b-thinking-2507", Name: "Qwen3 235B A22B Thinking 2507 (Qoder)", ContextLength: 131072, SupportsReasoning: true},
+			{ID: "qwen3-235b-a22b-instruct", Name: "Qwen3 235B A22B Instruct (Qoder)", ContextLength: 131072},
+			{ID: "qwen3-235b", Name: "Qwen3 235B (Qoder)", ContextLength: 131072},
 		},
 	})
 }
@@ -259,6 +280,46 @@ func RegisterKimiCoding() {
 	})
 }
 
+// RegisterKilocode registers the Kilocode OAuth provider.
+// Kilo's gateway serves free models anonymously when no account is connected;
+// HasFree flags this capability for the dashboard's anonymous-fallback logic.
+func RegisterKilocode() {
+	Register(&RegistryEntry{
+		ID:        "kilocode",
+		Alias:     "kc",
+		Name:      "Kilocode",
+		Format:    FormatOpenAI,
+		Executor:  "default",
+		BaseURL:   "https://api.kilo.ai/api/openrouter/chat/completions",
+		ModelsURL: "https://api.kilo.ai/api/openrouter/models",
+		AuthType:  AuthTypeOAuth,
+		AuthHeader: "Authorization",
+		AuthPrefix: "Bearer ",
+		DefaultContextLength: 131072,
+		HasFree:   true,
+		PassthroughModels: true,
+		Headers: map[string]string{
+			"X-KILOCODE-EDITORNAME": "OmniRoute",
+		},
+		Models: []RegistryModel{
+			{ID: "openrouter/free", Name: "Free Models Router (Kilo)", ContextLength: 131072},
+			{ID: "qwen/qwen3.6-plus", Name: "Qwen3.6 Plus (Kilo)", ContextLength: 131072},
+			{ID: "qwen/qwen3.5-397b-a17b", Name: "Qwen3.5 397B A17B (Kilo)", ContextLength: 131072},
+			{ID: "openai/gpt-5.5", Name: "GPT-5.5 (Kilo)", ContextLength: 128000, SupportsReasoning: true},
+			{ID: "openai/gpt-5.4-mini", Name: "GPT-5.4 Mini (Kilo)", ContextLength: 128000},
+			{ID: "anthropic/claude-opus-4.7", Name: "Claude Opus 4.7 (Kilo)", ContextLength: 200000, TargetFormat: FormatClaude, SupportsReasoning: true},
+			{ID: "anthropic/claude-sonnet-4.6", Name: "Claude Sonnet 4.6 (Kilo)", ContextLength: 200000, TargetFormat: FormatClaude, SupportsReasoning: true},
+			{ID: "anthropic/claude-haiku-4.5", Name: "Claude Haiku 4.5 (Kilo)", ContextLength: 200000, TargetFormat: FormatClaude},
+			{ID: "google/gemini-3.1-pro-preview", Name: "Gemini 3.1 Pro (Kilo)", ContextLength: 200000},
+			{ID: "google/gemini-3-flash-preview", Name: "Gemini 3 Flash (Kilo)", ContextLength: 131072},
+			{ID: "google/gemini-3.1-flash-lite", Name: "Gemini 3.1 Flash Lite (Kilo)", ContextLength: 131072},
+			{ID: "deepseek/deepseek-v4-pro", Name: "DeepSeek V4 Pro (Kilo)", ContextLength: 131072, SupportsReasoning: true},
+			{ID: "deepseek/deepseek-v4-flash", Name: "DeepSeek V4 Flash (Kilo)", ContextLength: 131072, SupportsReasoning: true},
+			{ID: "moonshotai/kimi-k2.6", Name: "Kimi K2.6 (Kilo)", ContextLength: 131072},
+		},
+	})
+}
+
 // RegisterCodebuddyCN registers the CodeBuddy CN (Tencent) OAuth provider.
 func RegisterCodebuddyCN() {
 	Register(&RegistryEntry{
@@ -351,18 +412,20 @@ func RegisterAmazonQ() {
 }
 
 // RegisterZedHosted registers the Zed Hosted Models OAuth provider.
+// Zed's hosted catalog changes frequently and is fetched live per-connection,
+// so models are not hardcoded here; modelsUrl feeds live discovery.
 func RegisterZedHosted() {
 	Register(&RegistryEntry{
-		ID:        "zed-hosted",
-		Name:      "Zed Hosted Models",
-		Format:    FormatOpenAI,
-		Executor:  "default",
-		BaseURL:   "https://cloud.zed.dev",
-		ChatPath:  "/completions",
-		AuthType:  AuthTypeOAuth,
-		AuthHeader: "Authorization",
-		AuthPrefix: "Bearer ",
+		ID:                   "zed-hosted",
+		Name:                 "Zed Hosted Models",
+		Format:               FormatOpenAI,
+		Executor:             "zed-hosted",
+		BaseURL:              "https://cloud.zed.dev/completions",
+		ModelsURL:            "https://cloud.zed.dev/models",
+		AuthType:             AuthTypeOAuth,
+		AuthHeader:           "Authorization",
+		AuthPrefix:           "Bearer ",
 		DefaultContextLength: 200000,
-		PassthroughModels: true,
+		PassthroughModels:    true,
 	})
 }

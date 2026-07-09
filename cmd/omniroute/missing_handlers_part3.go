@@ -25,7 +25,7 @@ func servicesInstallHandler(serviceName string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"service":  serviceName,
+			"service":   serviceName,
 			"installed": false,
 			"message":   "Service management not yet implemented in Go rewrite",
 		})
@@ -56,7 +56,7 @@ func servicesRestartHandler(serviceName string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"service":  serviceName,
+			"service":   serviceName,
 			"restarted": false,
 		})
 	}
@@ -76,8 +76,8 @@ func servicesAutoStartHandler(serviceName string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"service":    serviceName,
-			"autoStart":  false,
+			"service":   serviceName,
+			"autoStart": false,
 		})
 	}
 }
@@ -123,50 +123,6 @@ func internalCodexResponsesWSHandler() http.HandlerFunc {
 	}
 }
 
-// --- Logs handlers ---
-
-func logsListHandler(dbConn *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"object": "list", "data": []interface{}{}})
-	}
-}
-
-func logsDetailHandler(dbConn *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		id := chi.URLParam(r, "id")
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"id": id})
-	}
-}
-
-func logsConsoleHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"logs": []interface{}{}})
-	}
-}
-
-func logsExportHandler(dbConn *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"exported": false, "count": 0})
-	}
-}
-
-// --- Rate limit handler (singular) ---
-
-func rateLimitHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"enabled":     true,
-			"maxRequests": 100,
-			"windowMs":    60000,
-		})
-	}
-}
-
 // --- MCP audit stats handler ---
 
 func mcpAuditStatsHandler(mcpServer interface{}) http.HandlerFunc {
@@ -175,7 +131,7 @@ func mcpAuditStatsHandler(mcpServer interface{}) http.HandlerFunc {
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"totalInvocations": 0,
 			"successRate":      0.0,
-			"byTool":          map[string]interface{}{},
+			"byTool":           map[string]interface{}{},
 		})
 	}
 }

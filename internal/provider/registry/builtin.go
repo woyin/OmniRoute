@@ -5,6 +5,7 @@ func RegisterBuiltinProviders() {
 	// Priority executors (custom logic)
 	RegisterOpenCode()
 	RegisterOpenCodeGo()
+	RegisterOpenCodeZen()
 	RegisterCodex()
 	RegisterCommandCode()
 
@@ -38,6 +39,7 @@ func RegisterBuiltinProviders() {
 
 	// Enterprise / cloud
 	RegisterVertex()
+	RegisterVertexPartner()
 	RegisterCloudflareAI()
 	RegisterDatabricks()
 	RegisterSnowflake()
@@ -46,10 +48,14 @@ func RegisterBuiltinProviders() {
 
 	// Regional / Chinese providers
 	RegisterAlibaba()
+	RegisterAlibabaCN()
 	RegisterVolcengine()
 	RegisterGLM()
+	RegisterGLMCN()
 	RegisterMiniMax()
+	RegisterMiniMaxCN()
 	RegisterKimi()
+	RegisterKimiCodingAPIKey()
 	RegisterMoonshot()
 	RegisterXiaomiMiMo()
 
@@ -79,6 +85,9 @@ func RegisterBuiltinProviders() {
 
 	// Web cookie / OAuth-like providers
 	RegisterWebCookieProviders()
+
+	// No-auth / free providers (DuckDuckGo, Chipotle, TheOldLLM, VeoAIFree)
+	RegisterNoAuthProviders()
 
 	// Regional / enterprise providers
 	RegisterRegionalProviders()

@@ -1,5 +1,5 @@
 # Build
-omniroute
+/omniroute
 *.exe
 *.dll
 *.so
@@ -24,4 +24,3 @@ Thumbs.db
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
-omniroute
