@@ -86,10 +86,12 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Get("/docs/codex-cli", docsCodexCLIHandler())
 
 	// --- Evals ---
-	r.Post("/evals", placeholderHandler("evals"))
-	r.Post("/evals/suites", placeholderHandler("evals/suites"))
-	r.Get("/evals/suites/{suiteId}", placeholderHandler("evals/suites/detail"))
-	r.Get("/evals/{suiteId}", placeholderHandler("evals/detail"))
+	r.Post("/evals", evalRunHandler(dbConn))
+	r.Post("/evals/suites", evalSuiteCollectionHandler(dbConn))
+	r.Get("/evals/suites/{suiteId}", evalSuiteDetailHandler(dbConn))
+	r.Put("/evals/suites/{suiteId}", evalSuiteDetailHandler(dbConn))
+	r.Delete("/evals/suites/{suiteId}", evalSuiteDetailHandler(dbConn))
+	r.Get("/evals/{suiteId}", evalSuitePublicDetailHandler(dbConn))
 
 	// --- Fallback chains ---
 
