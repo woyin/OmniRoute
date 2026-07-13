@@ -390,3 +390,94 @@ func usageTokenLimitsHandler(dbConn *sql.DB) http.HandlerFunc {
 func validTokenLimitScope(scope string) bool {
 	return scope == "model" || scope == "provider" || scope == "global"
 }
+
+type budgetRequest struct {
+	APIKeyID         string   `json:"apiKeyId"`
+	DailyLimitUSD    float64  `json:"dailyLimitUsd"`
+	WeeklyLimitUSD   float64  `json:"weeklyLimitUsd"`
+	MonthlyLimitUSD  float64  `json:"monthlyLimitUsd"`
+	WarningThreshold *float64 `json:"warningThreshold"`
+	ResetInterval    string   `json:"resetInterval"`
+	ResetTime        string   `json:"resetTime"`
+}
+
+func usageBudgetHandler(dbConn *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			apiKeyID := r.URL.Query().Get("apiKeyId")
+			if apiKeyID == "" {
+				jsonError(w, http.StatusBadRequest, "apiKeyId query param is required")
+				return
+			}
+			summary, err := db.BudgetSummary(dbConn, apiKeyID, time.Now())
+			if err != nil {
+				jsonError(w, http.StatusInternalServerError, "Failed to fetch budget summary")
+				return
+			}
+			summary["budgetCheck"] = db.BudgetCheck(summary)
+			writeJSONResponse(w, summary)
+		case http.MethodPost:
+			var body budgetRequest
+			decoder := json.NewDecoder(r.Body)
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&body); err != nil {
+				jsonError(w, http.StatusBadRequest, "Invalid JSON body")
+				return
+			}
+			if body.APIKeyID == "" || body.DailyLimitUSD < 0 || body.WeeklyLimitUSD < 0 || body.MonthlyLimitUSD < 0 {
+				jsonError(w, http.StatusBadRequest, "Invalid request")
+				return
+			}
+			threshold := 0.8
+			if body.WarningThreshold != nil {
+				threshold = *body.WarningThreshold
+			}
+			if threshold < 0 || threshold > 1 {
+				jsonError(w, http.StatusBadRequest, "Invalid request")
+				return
+			}
+			if body.ResetInterval == "" {
+				body.ResetInterval = "daily"
+			}
+			if body.ResetTime == "" {
+				body.ResetTime = "00:00"
+			}
+			budget := db.Budget{APIKeyID: body.APIKeyID, DailyLimitUSD: body.DailyLimitUSD,
+				WeeklyLimitUSD: body.WeeklyLimitUSD, MonthlyLimitUSD: body.MonthlyLimitUSD,
+				WarningThreshold: threshold, ResetInterval: body.ResetInterval, ResetTime: body.ResetTime}
+			if _, _, err := db.TokenLimitWindow(db.TokenLimit{ResetInterval: budget.ResetInterval, ResetTime: budget.ResetTime}, time.Now()); err != nil {
+				jsonError(w, http.StatusBadRequest, "Invalid request")
+				return
+			}
+			persisted, err := db.UpsertBudget(dbConn, budget)
+			if err != nil {
+				jsonError(w, http.StatusInternalServerError, "Failed to set budget")
+				return
+			}
+			writeJSONResponse(w, map[string]interface{}{"success": true, "apiKeyId": body.APIKeyID, "budget": persisted})
+		}
+	}
+}
+
+func usageBudgetBulkHandler(dbConn *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		keys, err := db.ListAPIKeys(dbConn)
+		if err != nil {
+			jsonError(w, http.StatusInternalServerError, "Failed to fetch bulk budget summary")
+			return
+		}
+		budgets := make(map[string]interface{}, len(keys))
+		now := time.Now()
+		for _, key := range keys {
+			summary, err := db.BudgetSummary(dbConn, key.Key, now)
+			if err != nil {
+				jsonError(w, http.StatusInternalServerError, "Failed to fetch bulk budget summary")
+				return
+			}
+			summary["budgetCheck"] = db.BudgetCheck(summary)
+			budgets[key.Key] = summary
+		}
+		writeJSONResponse(w, map[string]interface{}{"budgets": budgets})
+	}
+}

@@ -17,8 +17,9 @@ import (
 // registerUsageRoutes registers usage/analytics sub-routes inside the /api group.
 func registerUsageRoutes(r chi.Router, dbConn *sql.DB) {
 	// Usage budget
-	r.Get("/usage/budget", placeholderHandler("usage/budget"))
-	r.Get("/usage/budget/bulk", placeholderHandler("usage/budget/bulk"))
+	r.Get("/usage/budget", usageBudgetHandler(dbConn))
+	r.Post("/usage/budget", usageBudgetHandler(dbConn))
+	r.Get("/usage/budget/bulk", usageBudgetBulkHandler(dbConn))
 
 	// Call logs
 	r.Get("/usage/call-logs", usageCallLogsHandler(dbConn))
