@@ -170,3 +170,76 @@ func usageProviderWindowCostsHandler(dbConn *sql.DB) http.HandlerFunc {
 		})
 	}
 }
+
+var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$`)
+var validUsageRanges = map[string]bool{"1h": true, "24h": true, "7d": true, "30d": true}
+
+func usageComboHealthHandler(dbConn *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		rangeValue := r.URL.Query().Get("range")
+		if !validUsageRanges[rangeValue] {
+			jsonError(w, http.StatusBadRequest, "Invalid query parameters")
+			return
+		}
+		comboID := r.URL.Query().Get("comboId")
+		if comboID != "" && !uuidPattern.MatchString(comboID) {
+			jsonError(w, http.StatusBadRequest, "Invalid query parameters")
+			return
+		}
+		combos, err := db.ListCombos(dbConn)
+		if err != nil {
+			jsonError(w, http.StatusInternalServerError, "Failed to fetch combo health")
+			return
+		}
+		result := make([]map[string]interface{}, 0)
+		for _, combo := range combos {
+			if comboID != "" && combo.ID != comboID {
+				continue
+			}
+			var requests, successes int
+			var latency float64
+			_ = dbConn.QueryRow(`SELECT COUNT(*), COALESCE(SUM(CASE WHEN success=1 THEN 1 ELSE 0 END),0), COALESCE(AVG(latency_ms),0) FROM usage_history WHERE model = ? AND created_at >= datetime('now', ?)`, combo.ID, rangeModifier(rangeValue)).Scan(&requests, &successes, &latency)
+			successRate := 0.0
+			if requests > 0 {
+				successRate = float64(successes) / float64(requests)
+			}
+			result = append(result, map[string]interface{}{"id": combo.ID, "name": combo.Name, "strategy": combo.Strategy, "active": combo.IsActive, "requestCount": requests, "successRate": successRate, "averageLatencyMs": latency, "targets": combo.Targets})
+		}
+		if comboID != "" && len(result) == 0 {
+			jsonError(w, http.StatusNotFound, "Combo not found")
+			return
+		}
+		writeJSONResponse(w, map[string]interface{}{"range": rangeValue, "generatedAt": time.Now().UTC().Format(time.RFC3339), "combos": result})
+	}
+}
+
+func usageRouteExplainHandler(dbConn *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		requestID := chi.URLParam(r, "id")
+		var log db.CallLog
+		var created string
+		err := dbConn.QueryRow(`SELECT id, provider, model, status_code, latency_ms, request_id, api_key, error_message, created_at FROM call_logs WHERE request_id = ? ORDER BY created_at DESC LIMIT 1`, requestID).Scan(&log.ID, &log.Provider, &log.Model, &log.StatusCode, &log.LatencyMs, &log.RequestID, &log.APIKey, &log.ErrorMessage, &created)
+		if err == sql.ErrNoRows {
+			jsonError(w, http.StatusNotFound, "Routing decision not found")
+			return
+		}
+		if err != nil {
+			jsonError(w, http.StatusInternalServerError, "Failed to explain route")
+			return
+		}
+		writeJSONResponse(w, map[string]interface{}{"requestId": requestID, "provider": log.Provider, "model": log.Model, "status": log.StatusCode, "latencyMs": log.LatencyMs, "error": nullable(log.ErrorMessage), "timestamp": created})
+	}
+}
+
+func rangeModifier(value string) string {
+	switch value {
+	case "1h":
+		return "-1 hour"
+	case "24h":
+		return "-1 day"
+	case "7d":
+		return "-7 days"
+	default:
+		return "-30 days"
+	}
+}

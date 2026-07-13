@@ -29,7 +29,7 @@ func registerUsageRoutes(r chi.Router, dbConn *sql.DB) {
 
 	// Combo health / forecast
 	r.Get("/usage/combo-forecast", placeholderHandler("usage/combo-forecast"))
-	r.Get("/usage/combo-health", placeholderHandler("usage/combo-health"))
+	r.Get("/usage/combo-health", usageComboHealthHandler(dbConn))
 	r.Get("/usage/combo-health-autopilot", placeholderHandler("usage/combo-health-autopilot"))
 	r.Get("/usage/combo-health-dashboard", placeholderHandler("usage/combo-health-dashboard"))
 	r.Get("/usage/combo-scoring-inspector", placeholderHandler("usage/combo-scoring-inspector"))
@@ -50,7 +50,7 @@ func registerUsageRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Get("/usage/request-logs", usageRequestLogsHandler(dbConn))
 
 	// Route explain
-	r.Get("/usage/route-explain/{id}", placeholderHandler("usage/route-explain"))
+	r.Get("/usage/route-explain/{id}", usageRouteExplainHandler(dbConn))
 
 	// Token limits
 	r.Get("/usage/token-limits", placeholderHandler("usage/token-limits"))
