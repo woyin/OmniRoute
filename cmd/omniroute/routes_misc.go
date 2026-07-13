@@ -363,9 +363,9 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Post("/webhooks", webhooksCreateHandler(dbConn))
 	r.Get("/webhooks/{id}", webhooksDeleteHandler(dbConn))
 	r.Delete("/webhooks/{id}", webhooksDeleteHandler(dbConn))
-	r.Get("/webhooks/{id}/deliveries", placeholderHandler("webhooks/deliveries"))
+	r.Get("/webhooks/{id}/deliveries", webhookDeliveriesHandler(dbConn))
 	r.Post("/webhooks/{id}/test", webhooksTestHandler(dbConn))
-	r.Post("/webhooks/validate-url", placeholderHandler("webhooks/validate-url"))
+	r.Post("/webhooks/validate-url", webhookValidateURLHandler())
 
 	// --- Shutdown ---
 	r.Post("/shutdown", restartHandler())
