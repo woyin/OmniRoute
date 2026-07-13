@@ -58,6 +58,12 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Get("/batches", managementBatchesHandler(dbConn))
 	r.Get("/batches/{id}", managementBatchesHandler(dbConn))
 
+	// --- Chaos ---
+	chaos := r.With(auth.LoginMiddleware(dbConn))
+	chaos.Get("/chaos/config", chaosConfigHandler(dbConn))
+	chaos.Put("/chaos/config", chaosConfigHandler(dbConn))
+	chaos.Delete("/chaos/config", chaosConfigHandler(dbConn))
+
 	// --- Cache ---
 
 	// --- CLI connect/tokens/whoami ---
@@ -275,6 +281,7 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Post("/sessions", sessionCreateHandler(dbConn))
 
 	// --- Skills ---
+	r.With(auth.LoginMiddleware(dbConn)).Post("/skills/collect/install", skillCollectInstallHandler())
 	r.Get("/skills", skillsListHandler(dbConn))
 	r.Post("/skills", skillsCreateHandler(dbConn))
 	r.Get("/skills/{id}", skillsDeleteHandler(dbConn))
