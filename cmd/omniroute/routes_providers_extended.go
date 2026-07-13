@@ -2,7 +2,6 @@
 //
 // Handles provider authentication flows (Claude, AGY, Codex imports),
 // bulk operations, health monitoring, and Zed provider discovery.
-//
 package main
 
 import (
@@ -43,17 +42,17 @@ func registerProvidersExtendedRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Get("/providers/command-code/auth/status", placeholderHandler("providers/command-code/auth/status"))
 
 	// Provider health / management
-	r.Get("/providers/expiration", placeholderHandler("providers/expiration"))
+	r.Get("/providers/expiration", providerExpirationHandler(dbConn))
 	r.Get("/providers/health-autopilot", placeholderHandler("providers/health-autopilot"))
 	r.Post("/providers/health-autopilot/actions", placeholderHandler("providers/health-autopilot/actions"))
 	r.Get("/providers/health-matrix", placeholderHandler("providers/health-matrix"))
 	r.Get("/providers/quota-windows", placeholderHandler("providers/quota-windows"))
 	r.Post("/providers/test-batch", placeholderHandler("providers/test-batch"))
-	r.Post("/providers/validate", placeholderHandler("providers/validate"))
+	r.Post("/providers/validate", providerValidateHandler())
 
 	// Per-provider sub-routes
 	r.Post("/providers/{id}/login", placeholderHandler("providers/login"))
-	r.Get("/providers/{id}/models", placeholderHandler("providers/models"))
+	r.Get("/providers/{id}/models", providerModelsHandler(dbConn))
 	r.Post("/providers/{id}/refresh", placeholderHandler("providers/refresh"))
 	r.Post("/providers/{id}/sync-models", placeholderHandler("providers/sync-models"))
 	r.Get("/providers/{id}/claude-auth/apply-local", placeholderHandler("providers/claude-auth/apply-local"))
