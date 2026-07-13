@@ -34,7 +34,7 @@ test("main route inventory is stable, canonical, unique, and contains core route
   for (const route of inventory.routes) {
     assert.match(route.path, /^\/api(?:\/|$)/);
     assert.doesNotMatch(route.path, /\[/);
-    assert.match(route.source, /^main:src\/app\/api\/.+\/route\.ts$/);
+    assert.match(route.source, /^(?:main|origin\/main):src\/app\/api\/.+\/route\.ts$/);
     assert.ok(["unknown"].includes(route.auth));
     assert.ok(["unknown"].includes(route.stream));
   }

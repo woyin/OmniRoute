@@ -8,7 +8,7 @@ import { extractRouteMethods, sortRouteContracts } from "./route-contract-lib.mj
 const args = process.argv.slice(2);
 const allowUnknown = args.includes("--allow-unknown");
 const refIndex = args.indexOf("--ref");
-const ref = refIndex >= 0 ? args[refIndex + 1] : "main";
+let ref = refIndex >= 0 ? args[refIndex + 1] : "main";
 const missingRef = refIndex >= 0 && (!ref || ref.startsWith("--"));
 const unexpected = args.filter((arg, index) =>
   arg !== "--allow-unknown" && arg !== "--ref" && index !== refIndex + 1
@@ -16,6 +16,14 @@ const unexpected = args.filter((arg, index) =>
 
 function git(...args) {
   return execFileSync("git", args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+}
+
+if (refIndex < 0) {
+  try {
+    git("rev-parse", "--verify", "main^{commit}");
+  } catch {
+    ref = "origin/main";
+  }
 }
 
 function fail(message) {
