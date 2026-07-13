@@ -269,3 +269,35 @@ func RegisterGatewayProviders() {
 	})
 
 }
+
+// Register9Router registers the 9router embedded service provider.
+func Register9Router() {
+	Register(&RegistryEntry{
+		ID:         "9router",
+		Alias:      "nr",
+		Name:       "9router",
+		Format:     FormatOpenAI,
+		AuthType:   AuthTypeAPIKey,
+		BaseURL:    "http://localhost:20130/api",
+		AuthHeader: "Authorization",
+		AuthPrefix: "Bearer ",
+		PassthroughModels: true,
+		DefaultContextLength: 131072,
+	})
+}
+
+// RegisterCLIProxyAPI registers the CLIProxyAPI upstream proxy provider.
+func RegisterCLIProxyAPI() {
+	Register(&RegistryEntry{
+		ID:         "cliproxyapi",
+		Alias:      "cpa",
+		Name:       "CLIProxyAPI",
+		Format:     FormatOpenAI,
+		AuthType:   AuthTypeAPIKey,
+		BaseURL:    "http://localhost:8317/v1",
+		AuthHeader: "Authorization",
+		AuthPrefix: "Bearer ",
+		PassthroughModels: true,
+		DefaultContextLength: 131072,
+	})
+}

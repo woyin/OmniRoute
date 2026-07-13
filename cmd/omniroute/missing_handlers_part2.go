@@ -197,18 +197,3 @@ func freeProviderRankingsHandler(dbConn *sql.DB) http.HandlerFunc {
 	}
 }
 
-// --- V1Beta models handlers ---
-
-func v1betaModelsListHandler(dbConn *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"object": "list", "data": []interface{}{}})
-	}
-}
-
-func v1betaModelsDetailHandler(dbConn *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"object": "list", "data": []interface{}{}})
-	}
-}

@@ -653,6 +653,26 @@ func (h *ProvidersHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		// Fallback to registered providers when DB has no connections
+		if len(connections) == 0 {
+			entries := registry.List()
+			var list []map[string]interface{}
+			for _, e := range entries {
+				list = append(list, map[string]interface{}{
+					"id":         e.ID,
+					"name":       e.Name,
+					"provider":   e.ID,
+					"authType":   e.AuthType,
+					"format":     e.Format,
+					"modelCount": len(e.Models),
+					"hasFree":    e.HasFree,
+					"baseUrl":    e.BaseURL,
+				})
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(list)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(connections)
 

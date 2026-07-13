@@ -1,3 +1,9 @@
+// Package registry provides a global provider registry for OmniRoute.
+// Each provider entry describes an AI service endpoint including its
+// authentication method, base URL, supported models, and wire format.
+//
+// Providers are registered at startup via RegisterBuiltinProviders() and
+// can be queried by ID or alias.
 package registry
 
 import (
@@ -66,6 +72,8 @@ type RegistryEntry struct {
 	Headers              map[string]string `json:"headers,omitempty"`
 	PassthroughModels    bool            `json:"passthroughModels,omitempty"`
 	HasFree              bool            `json:"hasFree,omitempty"`
+	Deprecated           bool            `json:"deprecated,omitempty"`
+	SystemOnly           bool            `json:"systemOnly,omitempty"`
 }
 
 // globalRegistry holds all provider entries.
