@@ -33,7 +33,9 @@ ENV DATA_DIR=/app/data
 ENV PORT=3456
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD wget -qO- --timeout=4 http://127.0.0.1:3456/health | grep -q '"status":"ok"'
+    CMD body=$(wget -qO- --timeout=4 "http://127.0.0.1:${PORT}/health") \
+      && printf '%s' "$body" | grep -q '"status":"ok"' \
+      && printf '%s' "$body" | grep -q '"db":"ok"'
 
 ENTRYPOINT ["/app/check-data-dir.sh"]
 CMD ["/app/omniroute"]
