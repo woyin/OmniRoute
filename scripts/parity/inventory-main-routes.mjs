@@ -3,7 +3,7 @@
 import { execFileSync } from "node:child_process";
 import process from "node:process";
 
-import { extractRouteMethods, sortRouteContracts } from "./route-contract-lib.mjs";
+import { classifyMainRouteAuth, classifyMainRouteStream, extractRouteMethods, sortRouteContracts } from "./route-contract-lib.mjs";
 
 const args = process.argv.slice(2);
 const allowUnknown = args.includes("--allow-unknown");
@@ -50,8 +50,8 @@ if (missingRef) {
           method,
           path,
           source: `${ref}:${source}`,
-          auth: "unknown",
-          stream: "unknown",
+          auth: classifyMainRouteAuth(contents),
+          stream: classifyMainRouteStream(contents, path, method),
         });
       }
     }
@@ -61,8 +61,8 @@ if (missingRef) {
     const duplicate = keys.find((key, index) => keys.indexOf(key) !== index);
     if (duplicate) {
       fail(`duplicate route contract: ${duplicate}`);
-    } else if (!allowUnknown && sorted.some(({ auth, stream }) => auth === "unknown" || stream === "unknown")) {
-      fail("unknown auth/stream classification; rerun with --allow-unknown for initial inventory");
+    } else if (!allowUnknown && sorted.some(({ auth }) => auth === "unknown")) {
+      fail("unknown auth classification; rerun with --allow-unknown for initial inventory");
     } else {
       process.stdout.write(`${JSON.stringify({ schemaVersion: 1, routes: sorted }, null, 2)}\n`);
     }

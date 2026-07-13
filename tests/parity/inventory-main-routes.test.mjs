@@ -31,12 +31,17 @@ test("main route inventory is stable, canonical, unique, and contains core route
   assert.ok(keys.includes("POST /api/v1/chat/completions"));
   assert.ok(keys.includes("GET /api/v1/models/{...}"));
 
+  const byKey = new Map(inventory.routes.map((route) => [`${route.method} ${route.path}`, route]));
+  assert.equal(byKey.get("GET /api/files")?.auth, "required");
+  assert.equal(byKey.get("GET /api/playground/presets")?.auth, "optional");
+  assert.equal(byKey.get("POST /api/v1/chat/completions")?.stream, "json+sse");
+
   for (const route of inventory.routes) {
     assert.match(route.path, /^\/api(?:\/|$)/);
     assert.doesNotMatch(route.path, /\[/);
     assert.match(route.source, /^(?:main|origin\/main):src\/app\/api\/.+\/route\.ts$/);
-    assert.ok(["unknown"].includes(route.auth));
-    assert.ok(["unknown"].includes(route.stream));
+    assert.ok(["required", "optional", "unknown"].includes(route.auth));
+    assert.ok(["json", "sse", "websocket", "json+sse"].includes(route.stream));
   }
 });
 
@@ -44,7 +49,7 @@ test("strict mode rejects unknown classifications using stderr only", () => {
   const result = spawnSync(process.execPath, [script], { encoding: "utf8" });
   assert.notEqual(result.status, 0);
   assert.equal(result.stdout, "");
-  assert.match(result.stderr, /unknown auth\/stream classification/);
+  assert.match(result.stderr, /unknown auth classification/);
 });
 
 

@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  classifyMainRouteAuth,
+  classifyMainRouteStream,
   compareRouteContracts,
   extractRouteMethods,
   normalizeRoutePath,
@@ -95,4 +97,18 @@ test("compareRouteContracts reports route, auth, and stream differences stably",
       },
     ],
   });
+});
+
+
+test("main route classifiers identify high-confidence auth and stream contracts", () => {
+  assert.equal(classifyMainRouteAuth(`const x = requireManagementAuth(request)`), "required");
+  assert.equal(classifyMainRouteAuth(`if (!(await isAuthenticated(request))) return unauthorized()`), "required");
+  assert.equal(classifyMainRouteAuth(`extractApiKey(request); isRequireApiKeyEnabled()`), "optional");
+  assert.equal(classifyMainRouteAuth(`return Response.json({ ok: true })`), "unknown");
+  assert.equal(classifyMainRouteStream(`headers: { "Content-Type": "text/event-stream" }`, "/api/events"), "sse");
+  assert.equal(classifyMainRouteStream(``, "/api/mcp/stream", "GET"), "sse");
+  assert.equal(classifyMainRouteStream(``, "/api/mcp/stream", "POST"), "json");
+  assert.equal(classifyMainRouteStream(``, "/api/v1/ws"), "websocket");
+  assert.equal(classifyMainRouteStream(``, "/api/v1/chat/completions"), "json+sse");
+  assert.equal(classifyMainRouteStream(``, "/api/health"), "json");
 });

@@ -72,12 +72,13 @@ func TestRouterInventoryStableAndComplete(t *testing.T) {
 		t.Fatalf("route count = %d, want at least 680", len(first.Routes))
 	}
 	wantMetadata := map[string][2]string{
-		"GET /health":          {"none", "json"},
-		"GET /api/providers":   {"required", "json"},
-		"GET /api/mcp/sse":     {"none", "sse"},
-		"GET /api/mcp/stream":  {"none", "sse"},
-		"POST /api/mcp/stream": {"none", "json"},
-		"GET /api/v1/ws":       {"optional", "websocket"},
+		"GET /health":           {"none", "json"},
+		"GET /api/providers":    {"required", "json"},
+		"GET /api/mcp/sse":      {"none", "sse"},
+		"GET /api/mcp/stream":   {"none", "sse"},
+		"POST /api/mcp/stream":  {"none", "json"},
+		"POST /api/v1/messages": {"optional", "json+sse"},
+		"GET /api/v1/ws":        {"optional", "websocket"},
 	}
 	for _, route := range first.Routes {
 		key := route.Method + " " + route.Path

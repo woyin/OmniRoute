@@ -39,4 +39,5 @@ jobs:
           DATA_DIR=$(mktemp -d) go run ./cmd/omniroute --inventory-routes > go-routes.json
           node scripts/parity/check-route-parity.mjs \
             --main main-routes.json --go go-routes.json \
-            --max-missing 254 --max-extra 116
+            --max-missing 254 --max-extra 116 \
+            --max-auth 215 --max-stream 4

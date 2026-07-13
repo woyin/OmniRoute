@@ -12,9 +12,12 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/omniroute/omniroute/internal/auth"
 	"github.com/omniroute/omniroute/internal/handler"
 	"github.com/omniroute/omniroute/internal/provider/registry"
 )
@@ -51,6 +54,37 @@ func providerTestByIDHandler(dbConn *sql.DB) http.HandlerFunc {
 	}
 }
 
+func gamificationNotificationsHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("apiKeyId") == "" {
+			jsonError(w, http.StatusBadRequest, "apiKeyId required")
+			return
+		}
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			jsonError(w, http.StatusInternalServerError, "Streaming unsupported")
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+		_, _ = fmt.Fprint(w, ": connected\n\n")
+		flusher.Flush()
+		// ponytail: heartbeat-only until badge unlock events are emitted by Go gamification writes.
+		ticker := time.NewTicker(15 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-r.Context().Done():
+				return
+			case now := <-ticker.C:
+				_, _ = fmt.Fprintf(w, ": heartbeat %d\n\n", now.UnixMilli())
+				flusher.Flush()
+			}
+		}
+	}
+}
+
 // registerParityRoutes adds all remaining management routes that exist in the
 // main branch but were not yet registered in the Go rewrite.
 // Must be called inside the /api router group.
@@ -64,9 +98,6 @@ func registerParityRoutes(r chi.Router, dbConn *sql.DB) {
 	// --- Settings: require-login (GET/PUT) ---
 	registerSettingsGetPut(r, "/settings/require-login", "require-login", dbConn)
 
-	// --- Batch detail routes (management level, not v1) ---
-	r.Get("/batches/{id}", batchDetailManagementHandler(dbConn))
-
 	// --- Gamification sub-routes ---
 	r.Get("/gamification/anomalies", gamificationStub("anomalies"))
 	r.Post("/gamification/anomalies", gamificationStub("anomalies"))
@@ -77,7 +108,7 @@ func registerParityRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Get("/gamification/invite", gamificationStub("invite"))
 	r.Post("/gamification/invite", gamificationStub("invite"))
 	r.Post("/gamification/invite/redeem", gamificationStub("invite-redeem"))
-	r.Get("/gamification/notifications", gamificationStub("notifications"))
+	r.With(auth.LoginMiddleware(dbConn)).Get("/gamification/notifications", gamificationNotificationsHandler())
 	r.Post("/gamification/rotate", gamificationStub("rotate"))
 	r.Get("/gamification/servers", gamificationStub("servers"))
 	r.Get("/gamification/stream", gamificationStreamHandler())

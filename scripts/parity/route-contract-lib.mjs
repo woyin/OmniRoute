@@ -118,3 +118,18 @@ export function compareRouteContracts(mainRoutes, goRoutes) {
 
   return { missingInGo, extraInGo, authMismatches, streamMismatches };
 }
+
+export function classifyMainRouteAuth(source) {
+  if (/\brequireManagementAuth\b|\brequireManagementSession\b/.test(source)) return "required";
+  if (/\bisAuthenticated\s*\(\s*request\s*\)/.test(source)) return "required";
+  if (/\bextractApiKey\b/.test(source) && /\bisRequireApiKeyEnabled\b/.test(source)) return "optional";
+  return "unknown";
+}
+
+export function classifyMainRouteStream(source, path, method = "GET") {
+  if (/\/ws(?:\/|$)|codex-responses-ws|traffic-inspector\/ws/.test(path)) return "websocket";
+  if (method === "GET" && (path === "/api/mcp/sse" || path === "/api/mcp/stream")) return "sse";
+  if (path === "/api/v1/chat/completions" || path === "/api/v1/responses" || path.startsWith("/api/v1/responses/") || path === "/api/v1/messages") return "json+sse";
+  if (/text\/event-stream|\bServerSentEvent\b|\bcreateSSE\b/.test(source)) return "sse";
+  return "json";
+}

@@ -8,11 +8,11 @@ import test from "node:test";
 
 const script = fileURLToPath(new URL("../../scripts/parity/check-route-parity.mjs", import.meta.url));
 
-function run(main, go, maxMissing, maxExtra) {
+function run(main, go, maxMissing, maxExtra, maxAuth = 0, maxStream = 0) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "route-parity-"));
   fs.writeFileSync(path.join(dir, "main.json"), JSON.stringify({ routes: main }));
   fs.writeFileSync(path.join(dir, "go.json"), JSON.stringify({ routes: go }));
-  return spawnSync(process.execPath, [script, "--main", path.join(dir, "main.json"), "--go", path.join(dir, "go.json"), "--max-missing", String(maxMissing), "--max-extra", String(maxExtra)], { encoding: "utf8" });
+  return spawnSync(process.execPath, [script, "--main", path.join(dir, "main.json"), "--go", path.join(dir, "go.json"), "--max-missing", String(maxMissing), "--max-extra", String(maxExtra), "--max-auth", String(maxAuth), "--max-stream", String(maxStream)], { encoding: "utf8" });
 }
 
 const route = (method, path) => ({ method, path, auth: "none", stream: "json" });

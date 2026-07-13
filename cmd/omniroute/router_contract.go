@@ -99,11 +99,11 @@ func routeAuth(middlewares []func(http.Handler) http.Handler, requireAPIKey bool
 
 func routeStream(method, path string) string {
 	switch {
-	case path == "/api/mcp/sse", path == "/api/gamification/stream", method == http.MethodGet && path == "/api/mcp/stream":
+	case path == "/api/mcp/sse", path == "/api/gamification/stream", path == "/api/gamification/notifications", method == http.MethodGet && path == "/api/mcp/stream":
 		return "sse"
 	case path == "/api/v1/ws", path == "/api/internal/codex-responses-ws", path == "/api/tools/traffic-inspector/ws":
 		return "websocket"
-	case path == "/api/v1/chat/completions", path == "/api/v1/responses", path == "/api/v1/responses/{path}":
+	case path == "/api/v1/chat/completions", path == "/api/v1/responses", path == "/api/v1/responses/{path}", path == "/api/v1/messages":
 		return "json+sse"
 	default:
 		return "json"
