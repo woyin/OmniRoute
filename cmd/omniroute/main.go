@@ -19,11 +19,11 @@
 //   - internal/sse/        : Server-Sent Events support
 //
 // Route Structure:
-//   /              : Root handler, health check, agent card
-//   /api/*        : Management API routes (providers, combos, settings, etc.)
-//   /api/v1/*     : AI proxy routes (chat/completions, embeddings, etc.)
-//   /api/v1beta/* : Beta API routes
 //
+//	/              : Root handler, health check, agent card
+//	/api/*        : Management API routes (providers, combos, settings, etc.)
+//	/api/v1/*     : AI proxy routes (chat/completions, embeddings, etc.)
+//	/api/v1beta/* : Beta API routes
 package main
 
 import (
@@ -39,25 +39,24 @@ import (
 	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
 
-
+	"github.com/omniroute/omniroute/internal/a2a"
+	"github.com/omniroute/omniroute/internal/auth"
 	"github.com/omniroute/omniroute/internal/config"
 	"github.com/omniroute/omniroute/internal/db"
 	"github.com/omniroute/omniroute/internal/handler"
-	"github.com/omniroute/omniroute/internal/middleware"
-	"github.com/omniroute/omniroute/internal/a2a"
-	"github.com/omniroute/omniroute/internal/oauth"
-	"github.com/omniroute/omniroute/internal/mcp"
-	"github.com/omniroute/omniroute/internal/auth"
 	"github.com/omniroute/omniroute/internal/management"
+	"github.com/omniroute/omniroute/internal/mcp"
+	"github.com/omniroute/omniroute/internal/middleware"
+	"github.com/omniroute/omniroute/internal/oauth"
 	"github.com/omniroute/omniroute/internal/provider/registry"
 )
 
 var (
-	version   = "4.0.0-go"
-	showHelp  = false
-	portFlag  = 0
-	dataDir   = ""
-	mcpMode   = false
+	version  = "4.0.0-go"
+	showHelp = false
+	portFlag = 0
+	dataDir  = ""
+	mcpMode  = false
 )
 
 func init() {
@@ -144,8 +143,8 @@ func main() {
 	mgmtDBBackups := &management.DBBackupsHandler{DB: dbConn, DataDir: cfg.DataDir, DBPath: cfg.SQLiteFile}
 
 	// Rate limiters for API and management routes
-	rlV1 := middleware.NewRateLimiter(100, 200)   // 100 req/s, burst 200 for v1 proxy routes
-	rlMgmt := middleware.NewRateLimiter(50, 100)   // 50 req/s, burst 100 for management routes
+	rlV1 := middleware.NewRateLimiter(100, 200)  // 100 req/s, burst 200 for v1 proxy routes
+	rlMgmt := middleware.NewRateLimiter(50, 100) // 50 req/s, burst 100 for management routes
 
 	r := chi.NewRouter()
 	r.Use(chimw.RequestID)
@@ -154,7 +153,6 @@ func main() {
 	r.Use(middleware.CORS)
 	r.Use(middleware.StripTrailingSlash)
 	r.Use(chimw.Compress(5))
-
 
 	// Root — API info landing page
 	r.Get("/", webFileServer())
@@ -180,6 +178,7 @@ func main() {
 		// Login middleware for protected routes
 		r.Group(func(r chi.Router) {
 			r.Use(auth.LoginMiddleware(dbConn))
+			r.Use(auth.CSRFMiddleware)
 
 			// Providers CRUD
 			r.Get("/providers", (&handler.ProvidersHandler{DB: dbConn}).ServeHTTP)
@@ -853,7 +852,6 @@ func main() {
 	}
 }
 
-
 // jsonError writes a JSON-formatted error response.
 func jsonError(w http.ResponseWriter, status int, message string) {
 	w.Header().Set("Content-Type", "application/json")
@@ -913,35 +911,35 @@ func serveRootHandler(ver string, cfg *config.Config) http.HandlerFunc {
 			"status":  "running",
 			"port":    cfg.Port,
 			"endpoints": map[string]string{
-				"health":              "GET  /health",
-				"auth.require-login":  "GET|POST /api/auth/require-login",
-				"auth.login":          "POST /api/auth/login",
-				"auth.logout":         "POST /api/auth/logout",
-				"providers":           "GET|POST|PUT|DELETE /api/providers",
-				"combos":              "GET|POST|PUT|DELETE /api/combos",
-				"api-keys":            "GET|POST /api/api-keys",
-				"chat.completions":    "POST /api/v1/chat/completions",
-				"responses":           "POST /api/v1/responses",
-				"completions":         "POST /api/v1/completions",
-				"models":              "GET  /api/v1/models",
-				"embeddings":          "POST /api/v1/embeddings",
-				"images.generations":  "POST /api/v1/images/generations",
-				"audio.speech":        "POST /api/v1/audio/speech",
+				"health":               "GET  /health",
+				"auth.require-login":   "GET|POST /api/auth/require-login",
+				"auth.login":           "POST /api/auth/login",
+				"auth.logout":          "POST /api/auth/logout",
+				"providers":            "GET|POST|PUT|DELETE /api/providers",
+				"combos":               "GET|POST|PUT|DELETE /api/combos",
+				"api-keys":             "GET|POST /api/api-keys",
+				"chat.completions":     "POST /api/v1/chat/completions",
+				"responses":            "POST /api/v1/responses",
+				"completions":          "POST /api/v1/completions",
+				"models":               "GET  /api/v1/models",
+				"embeddings":           "POST /api/v1/embeddings",
+				"images.generations":   "POST /api/v1/images/generations",
+				"audio.speech":         "POST /api/v1/audio/speech",
 				"audio.transcriptions": "POST /api/v1/audio/transcriptions",
-				"moderations":         "POST /api/v1/moderations",
-				"rerank":              "POST /api/v1/rerank",
-				"search":              "POST /api/v1/search",
-				"files":               "GET|POST /api/v1/files",
-				"batches":             "GET|POST /api/v1/batches",
-				"usage.analytics":     "GET  /api/usage/analytics",
-			"usage.history":      "GET  /api/usage/history",
-			"usage.logs":          "GET  /api/usage/logs",
-			"db.health":           "GET  /api/db/health",
-			"settings":            "GET|PUT /api/settings",
-			"export":              "GET  /api/settings/export-json",
-			"import":              "POST /api/settings/import-json",
-			"version":             "GET  /api/system/version",
-			"agent-card":          "GET  /.well-known/agent.json",
+				"moderations":          "POST /api/v1/moderations",
+				"rerank":               "POST /api/v1/rerank",
+				"search":               "POST /api/v1/search",
+				"files":                "GET|POST /api/v1/files",
+				"batches":              "GET|POST /api/v1/batches",
+				"usage.analytics":      "GET  /api/usage/analytics",
+				"usage.history":        "GET  /api/usage/history",
+				"usage.logs":           "GET  /api/usage/logs",
+				"db.health":            "GET  /api/db/health",
+				"settings":             "GET|PUT /api/settings",
+				"export":               "GET  /api/settings/export-json",
+				"import":               "POST /api/settings/import-json",
+				"version":              "GET  /api/system/version",
+				"agent-card":           "GET  /.well-known/agent.json",
 			},
 			"docs": "https://omniroute.dev",
 		})
@@ -981,12 +979,12 @@ func providerStatsHandler(dbConn *sql.DB) http.HandlerFunc {
 				dbConn.QueryRow("SELECT COUNT(*) FROM provider_connections WHERE provider = ? AND is_active = 1", entry.ID).Scan(&count)
 			}
 			stats[entry.ID] = map[string]interface{}{
-				"name":           entry.Name,
-				"authType":       entry.AuthType,
-				"format":         entry.Format,
-				"modelCount":     len(entry.Models),
-				"connections":    count,
-				"hasFree":        entry.HasFree,
+				"name":        entry.Name,
+				"authType":    entry.AuthType,
+				"format":      entry.Format,
+				"modelCount":  len(entry.Models),
+				"connections": count,
+				"hasFree":     entry.HasFree,
 			}
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -1002,8 +1000,8 @@ func serveAgentCard() http.HandlerFunc {
 			"version":     version,
 			"url":         "https://omniroute.dev",
 			"capabilities": map[string]interface{}{
-				"streaming": true,
-				"pushNotifications": false,
+				"streaming":              true,
+				"pushNotifications":      false,
 				"stateTransitionHistory": true,
 			},
 			"skills": []map[string]interface{}{
