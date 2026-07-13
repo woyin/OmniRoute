@@ -3,15 +3,13 @@ version: 2
 project_name: omniroute
 
 builds:
-  - id: omniroute
+  - id: omniroute-linux
     main: ./cmd/omniroute
     binary: omniroute
     env:
       - CGO_ENABLED=1
     goos:
       - linux
-      - darwin
-      - windows
     goarch:
       - amd64
       - arm64
@@ -24,28 +22,47 @@ builds:
         goarch: arm64
         env:
           - CC=aarch64-linux-gnu-gcc
-          - CGO_ENABLED=1
       - goos: linux
         goarch: amd64
         env:
           - CC=x86_64-linux-gnu-gcc
-          - CGO_ENABLED=1
-      - goos: darwin
-        goarch: arm64
-        env:
-          - CGO_ENABLED=1
-          - CC=clang
-      - goos: darwin
-        goarch: amd64
-        env:
-          - CGO_ENABLED=1
-          - CC=clang
-      - goos: windows
-        env:
-          - CGO_ENABLED=0
+
+  - id: omniroute-darwin
+    main: ./cmd/omniroute
+    binary: omniroute
+    env:
+      - CGO_ENABLED=1
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+
+  - id: omniroute-windows
+    main: ./cmd/omniroute
+    binary: omniroute
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
 
 archives:
   - id: default
+    builds:
+      - omniroute-linux
+      - omniroute-darwin
+      - omniroute-windows
     format: tar.gz
     format_overrides:
       - goos: windows
