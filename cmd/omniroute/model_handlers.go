@@ -1,10 +1,15 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
+	"io"
 	"net/http"
+	"net/url"
 	"strings"
+	"time"
 
 	"github.com/omniroute/omniroute/internal/db"
 	"github.com/omniroute/omniroute/internal/provider/registry"
@@ -95,4 +100,104 @@ func openRouterCatalogHandler() http.HandlerFunc {
 		}
 		writeJSONResponse(w, map[string]interface{}{"object": "list", "data": data, "meta": map[string]interface{}{"source": "local_catalog", "count": len(data)}})
 	}
+}
+
+func modelTestHandler(dbConn *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			ProviderID   string `json:"providerId"`
+			ModelID      string `json:"modelId"`
+			ConnectionID string `json:"connectionId"`
+		}
+		if json.NewDecoder(r.Body).Decode(&body) != nil {
+			w.WriteHeader(400)
+			writeJSONResponse(w, map[string]interface{}{"status": "error", "error": "Invalid JSON body"})
+			return
+		}
+		result, status := runModelProbe(r.Context(), dbConn, body.ProviderID, body.ModelID, body.ConnectionID)
+		w.WriteHeader(status)
+		writeJSONResponse(w, result)
+	}
+}
+
+func modelTestAllHandler(dbConn *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			ProviderID   string   `json:"providerId"`
+			ModelIDs     []string `json:"modelIds"`
+			ConnectionID string   `json:"connectionId"`
+		}
+		if json.NewDecoder(r.Body).Decode(&body) != nil || body.ProviderID == "" || len(body.ModelIDs) < 1 || len(body.ModelIDs) > 100 {
+			jsonError(w, 400, "Invalid request")
+			return
+		}
+		results := map[string]interface{}{}
+		for _, model := range body.ModelIDs {
+			result, _ := runModelProbe(r.Context(), dbConn, body.ProviderID, model, body.ConnectionID)
+			results[model] = result
+		}
+		writeJSONResponse(w, map[string]interface{}{"results": results})
+	}
+}
+
+func runModelProbe(ctx context.Context, dbConn *sql.DB, providerID, modelID, connectionID string) (map[string]interface{}, int) {
+	if providerID == "" || modelID == "" {
+		return map[string]interface{}{"status": "error", "error": "providerId and modelId are required"}, 400
+	}
+	entry := registry.Get(providerID)
+	var connection *db.ProviderConnection
+	if connectionID != "" {
+		connection, _ = db.GetProviderConnection(dbConn, connectionID)
+		if connection == nil {
+			return map[string]interface{}{"status": "error", "error": "Connection not found"}, 404
+		}
+		entry = registry.Get(connection.Provider)
+	}
+	if entry == nil {
+		return map[string]interface{}{"status": "error", "error": "Provider not found"}, 404
+	}
+	if entry.BaseURL == "" {
+		return map[string]interface{}{"status": "error", "error": "Provider has no HTTP endpoint"}, 400
+	}
+	endpoint := strings.TrimRight(entry.BaseURL, "/") + entry.ChatPath
+	if entry.ChatPath == "" {
+		endpoint = strings.TrimRight(entry.BaseURL, "/") + "/chat/completions"
+	}
+	u, err := url.Parse(endpoint)
+	if err != nil || u.Scheme != "https" && u.Scheme != "http" {
+		return map[string]interface{}{"status": "error", "error": "Invalid provider endpoint"}, 400
+	}
+	payload, _ := json.Marshal(map[string]interface{}{"model": modelID, "messages": []map[string]string{{"role": "user", "content": "ping"}}, "max_tokens": 1, "stream": false})
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	if connection != nil {
+		key := connection.APIKey
+		if key == "" {
+			key = connection.AccessToken
+		}
+		if key != "" {
+			header := entry.AuthHeader
+			if header == "" {
+				header = "Authorization"
+			}
+			prefix := entry.AuthPrefix
+			if prefix == "" && header == "Authorization" {
+				prefix = "Bearer "
+			}
+			req.Header.Set(header, prefix+key)
+		}
+	}
+	start := time.Now()
+	client := http.Client{Timeout: 20 * time.Second}
+	resp, err := client.Do(req)
+	latency := time.Since(start).Milliseconds()
+	if err != nil {
+		return map[string]interface{}{"status": "error", "latencyMs": latency, "error": err.Error()}, 502
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return map[string]interface{}{"status": "error", "latencyMs": latency, "error": strings.TrimSpace(string(raw)), "statusCode": resp.StatusCode, "rateLimited": resp.StatusCode == 429}, resp.StatusCode
+	}
+	return map[string]interface{}{"status": "ok", "latencyMs": latency, "responseText": strings.TrimSpace(string(raw))}, 200
 }

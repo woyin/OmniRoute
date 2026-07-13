@@ -146,8 +146,8 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Put("/models/alias", modelAliasHandler(dbConn))
 	r.Delete("/models/alias", modelAliasHandler(dbConn))
 	r.Get("/models/openrouter-catalog", openRouterCatalogHandler())
-	r.Post("/models/test", placeholderHandler("models/test"))
-	r.Post("/models/test-all", placeholderHandler("models/test-all"))
+	r.Post("/models/test", modelTestHandler(dbConn))
+	r.Post("/models/test-all", modelTestAllHandler(dbConn))
 	r.Get("/models/{model}", modelDetailHandler())
 
 	// --- Monitoring ---
