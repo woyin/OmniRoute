@@ -481,3 +481,72 @@ func usageBudgetBulkHandler(dbConn *sql.DB) http.HandlerFunc {
 		writeJSONResponse(w, map[string]interface{}{"budgets": budgets})
 	}
 }
+
+func searchStatsHandler(dbConn *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var cacheEntries, cacheHits int
+		if err := dbConn.QueryRow("SELECT COUNT(*), COALESCE(SUM(hit_count),0) FROM semantic_cache").Scan(&cacheEntries, &cacheHits); err != nil {
+			jsonError(w, http.StatusInternalServerError, "Failed to get stats")
+			return
+		}
+		providers := map[string]interface{}{}
+		rows, err := dbConn.Query(`SELECT provider, COUNT(*), COALESCE(AVG(latency_ms),0)
+			FROM call_logs GROUP BY provider ORDER BY provider`)
+		if err != nil {
+			jsonError(w, http.StatusInternalServerError, "Failed to get stats")
+			return
+		}
+		for rows.Next() {
+			var provider string
+			var requests int
+			var latency float64
+			if err := rows.Scan(&provider, &requests, &latency); err != nil {
+				rows.Close()
+				jsonError(w, http.StatusInternalServerError, "Failed to get stats")
+				return
+			}
+			// ponytail: cost stays zero until Go persists search-provider pricing.
+			providers[provider] = map[string]interface{}{"requests": requests, "avg_latency_ms": latency, "total_cost": 0}
+		}
+		rows.Close()
+		recent := make([]map[string]interface{}, 0)
+		rows, err = dbConn.Query("SELECT provider, created_at FROM call_logs ORDER BY created_at DESC LIMIT 20")
+		if err != nil {
+			jsonError(w, http.StatusInternalServerError, "Failed to get stats")
+			return
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var provider, timestamp string
+			if err := rows.Scan(&provider, &timestamp); err != nil {
+				jsonError(w, http.StatusInternalServerError, "Failed to get stats")
+				return
+			}
+			recent = append(recent, map[string]interface{}{"query": "", "provider": provider, "timestamp": timestamp, "filters": map[string]interface{}{}})
+		}
+		writeJSONResponse(w, map[string]interface{}{
+			"cache":     map[string]interface{}{"entries": cacheEntries, "hits": cacheHits},
+			"providers": providers, "recent_searches": recent,
+		})
+	}
+}
+
+func resilienceResetHandler(dbConn *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		result, err := dbConn.Exec(`UPDATE domain_circuit_breakers SET state='closed', failure_count=0,
+			last_failure_at=NULL, last_state_change_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP`)
+		if err != nil {
+			jsonError(w, http.StatusInternalServerError, "Failed to reset resilience state")
+			return
+		}
+		count, err := result.RowsAffected()
+		if err != nil {
+			jsonError(w, http.StatusInternalServerError, "Failed to reset resilience state")
+			return
+		}
+		writeJSONResponse(w, map[string]interface{}{
+			"ok": true, "resetCount": count,
+			"message": fmt.Sprintf("Reset %d circuit breaker(s) and model lockouts", count),
+		})
+	}
+}

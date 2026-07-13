@@ -216,7 +216,7 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 
 	// --- Resilience ---
 	r.Get("/resilience/model-cooldowns", placeholderHandler("resilience/model-cooldowns"))
-	r.Post("/resilience/reset", placeholderHandler("resilience/reset"))
+	r.Post("/resilience/reset", resilienceResetHandler(dbConn))
 
 	// --- Restart ---
 	r.Post("/restart", restartHandler())
@@ -225,8 +225,8 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Get("/routing/decisions/{requestId}", routingDecisionDetailHandler(dbConn))
 
 	// --- Search ---
-	r.Get("/search/providers", placeholderHandler("search/providers"))
-	r.Get("/search/stats", placeholderHandler("search/stats"))
+	r.Get("/search/providers", searchProvidersHandler(dbConn))
+	r.Get("/search/stats", searchStatsHandler(dbConn))
 
 	// --- Services (9router, bifrost, cliproxy, mux) ---
 	r.Get("/services/9router/status", servicesStatusHandler("9router"))
