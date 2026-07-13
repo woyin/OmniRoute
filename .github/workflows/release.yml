@@ -122,6 +122,9 @@ jobs:
           path: artifacts
           merge-multiple: true
 
+      - name: Self-test release asset verification
+        run: scripts/ci/verify-release-assets.sh --self-test
+
       - name: Create release archives
         env:
           VERSION: ${{ github.ref_name }}
