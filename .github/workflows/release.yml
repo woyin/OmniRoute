@@ -129,12 +129,19 @@ jobs:
         env:
           VERSION: ${{ github.ref_name }}
         run: |
+          chmod 755 artifacts/omniroute_linux_amd64 artifacts/omniroute_linux_arm64 \
+            artifacts/omniroute_darwin_amd64 artifacts/omniroute_darwin_arm64
           mkdir release
           tar czf "release/omniroute_${VERSION}_linux_x86_64.tar.gz" -C artifacts omniroute_linux_amd64
           tar czf "release/omniroute_${VERSION}_linux_aarch64.tar.gz" -C artifacts omniroute_linux_arm64
           tar czf "release/omniroute_${VERSION}_darwin_x86_64.tar.gz" -C artifacts omniroute_darwin_amd64
           tar czf "release/omniroute_${VERSION}_darwin_aarch64.tar.gz" -C artifacts omniroute_darwin_arm64
           (cd artifacts && zip "../release/omniroute_${VERSION}_windows_x86_64.zip" omniroute_windows_amd64.exe)
+          for archive in release/*.tar.gz; do
+            entry=$(tar tzf "$archive")
+            mode=$(tar tvzf "$archive" | cut -c4)
+            [ "$mode" = x ] || { echo "release binary is not executable: $entry" >&2; exit 1; }
+          done
 
       - name: Verify release assets
         run: scripts/ci/verify-release-assets.sh release "${GITHUB_REF_NAME}"
