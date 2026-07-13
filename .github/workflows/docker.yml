@@ -2,10 +2,10 @@ name: Docker Build & Push
 
 on:
   push:
-    branches: [main, go-rewrite]
+    branches: [go-rewrite]
     tags: ['v*-go']
   pull_request:
-    branches: [main, go-rewrite]
+    branches: [go-rewrite]
   workflow_dispatch:
     inputs:
       tag:
@@ -29,7 +29,7 @@ on:
         type: boolean
 
 concurrency:
-  group: docker-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_type == 'tag' && github.ref_name || github.ref_name == 'go-rewrite' && 'edge' || github.ref_name == 'main' && 'edge-main' || github.ref }}
+  group: docker-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_type == 'tag' && github.ref_name || 'edge' }}
   cancel-in-progress: false
 
 permissions:
@@ -148,25 +148,42 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Check Docker Hub credentials
+        id: credentials
+        run: |
+          if [ -n "$DOCKERHUB_USERNAME" ] && [ -n "$DOCKERHUB_TOKEN" ]; then
+            echo 'available=true' >>"$GITHUB_OUTPUT"
+          else
+            echo 'available=false' >>"$GITHUB_OUTPUT"
+            echo '::notice::Docker Hub publication skipped: DOCKERHUB_USERNAME or DOCKERHUB_TOKEN is not configured'
+          fi
 
-      - uses: docker/setup-qemu-action@v3
+      - if: steps.credentials.outputs.available == 'true'
+        uses: actions/checkout@v4
 
-      - uses: docker/setup-buildx-action@v3
+      - if: steps.credentials.outputs.available == 'true'
+        uses: docker/setup-qemu-action@v3
+
+      - if: steps.credentials.outputs.available == 'true'
+        uses: docker/setup-buildx-action@v3
 
       - name: Login to Docker Hub
+        if: steps.credentials.outputs.available == 'true'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Resolve publication tags
+        if: steps.credentials.outputs.available == 'true'
         id: tags
         env:
           DISPATCH_TAG: ${{ inputs.tag }}
           PROMOTE_LATEST: ${{ inputs.promote_latest }}
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
         run: |
           image="${DOCKERHUB_USERNAME,,}/omniroute"
           promote_latest=false
@@ -193,6 +210,7 @@ jobs:
           } >>"$GITHUB_OUTPUT"
 
       - name: Build and push manifest
+        if: steps.credentials.outputs.available == 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -203,4 +221,5 @@ jobs:
           cache-to: type=gha,mode=max,scope=publish-dockerhub
 
       - name: Verify manifest platforms
+        if: steps.credentials.outputs.available == 'true'
         run: scripts/ci/check-image-platforms.sh '${{ steps.tags.outputs.primary }}'
