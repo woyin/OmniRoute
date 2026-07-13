@@ -353,11 +353,11 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	// --- Tunnels ---
 	r.Post("/tunnels/cloudflared", placeholderHandler("tunnels/cloudflared"))
 	r.Post("/tunnels/ngrok", placeholderHandler("tunnels/ngrok"))
-	r.Get("/tunnels/tailscale", placeholderHandler("tunnels/tailscale"))
-	r.Get("/tunnels/tailscale/check", placeholderHandler("tunnels/tailscale/check"))
-	r.Post("/tunnels/tailscale/install", placeholderHandler("tunnels/tailscale/install"))
-	r.Post("/tunnels/tailscale/login", placeholderHandler("tunnels/tailscale/login"))
-	r.Post("/tunnels/tailscale/start-daemon", placeholderHandler("tunnels/tailscale/start-daemon"))
+	r.Get("/tunnels/tailscale", tailscaleCheckHandler())
+	r.Get("/tunnels/tailscale/check", tailscaleCheckHandler())
+	r.Post("/tunnels/tailscale/install", tailscaleInstallHandler())
+	r.Post("/tunnels/tailscale/login", tailscaleLoginHandler())
+	r.Post("/tunnels/tailscale/start-daemon", tailscaleCommandHandler("status"))
 
 	// --- Version manager ---
 	r.Get("/version-manager/status", versionManagerStatusHandler())
