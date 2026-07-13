@@ -49,6 +49,7 @@ func registerUsageRoutes(r chi.Router, dbConn *sql.DB) {
 
 	// Request logs
 	r.Get("/usage/request-logs", usageRequestLogsHandler(dbConn))
+	r.Get("/usage/requests-by-provider-date", usageRequestsByProviderDateHandler(dbConn))
 
 	// Route explain
 	r.Get("/usage/route-explain/{id}", usageRouteExplainHandler(dbConn))

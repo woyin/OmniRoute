@@ -81,6 +81,7 @@ func runMigrations(db *sql.DB) error {
 		{"009_playground_presets", schemaV9},
 		{"010_files", schemaV10},
 		{"011_batches", schemaV11},
+		{"012_model_capability_overrides", schemaV12},
 	}
 
 	for _, m := range migrations {
@@ -130,6 +131,7 @@ var schemaV8 = migrations.SchemaV8
 var schemaV9 = migrations.SchemaV9
 var schemaV10 = migrations.SchemaV10
 var schemaV11 = migrations.SchemaV11
+var schemaV12 = migrations.SchemaV12
 
 const schemaV1 = `
 CREATE TABLE IF NOT EXISTS provider_connections (

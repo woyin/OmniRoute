@@ -550,3 +550,108 @@ func resilienceResetHandler(dbConn *sql.DB) http.HandlerFunc {
 		})
 	}
 }
+
+type providerDailyUsageRow struct {
+	Date             string `json:"date"`
+	Provider         string `json:"provider"`
+	Requests         int    `json:"requests"`
+	PromptTokens     int    `json:"promptTokens"`
+	CompletionTokens int    `json:"completionTokens"`
+	TotalTokens      int    `json:"totalTokens"`
+}
+
+func usageRequestsByProviderDateHandler(dbConn *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		rangeValue := r.URL.Query().Get("range")
+		if rangeValue == "" {
+			rangeValue = "30d"
+		}
+		date := r.URL.Query().Get("date")
+		start, end, err := usageDateWindow(rangeValue, date, r.URL.Query().Get("startDate"), r.URL.Query().Get("endDate"), time.Now().UTC())
+		if err != nil {
+			jsonError(w, http.StatusBadRequest, "Invalid date range")
+			return
+		}
+		query := `SELECT DATE(created_at),LOWER(provider),COUNT(*),COALESCE(SUM(input_tokens),0),COALESCE(SUM(output_tokens),0),COALESCE(SUM(input_tokens+output_tokens),0) FROM usage_history`
+		where := []string{}
+		args := []interface{}{}
+		if start != "" {
+			where = append(where, "created_at>=?")
+			args = append(args, start)
+		}
+		if end != "" {
+			where = append(where, "created_at<=?")
+			args = append(args, end)
+		}
+		if len(where) > 0 {
+			query += " WHERE " + strings.Join(where, " AND ")
+		}
+		query += " GROUP BY DATE(created_at),LOWER(provider) ORDER BY DATE(created_at) DESC,COUNT(*) DESC"
+		rows, err := dbConn.Query(query, args...)
+		if err != nil {
+			jsonError(w, http.StatusInternalServerError, "Failed to compute requests-by-provider-date")
+			return
+		}
+		defer rows.Close()
+		result := make([]providerDailyUsageRow, 0)
+		for rows.Next() {
+			var row providerDailyUsageRow
+			if err := rows.Scan(&row.Date, &row.Provider, &row.Requests, &row.PromptTokens, &row.CompletionTokens, &row.TotalTokens); err != nil {
+				jsonError(w, http.StatusInternalServerError, "Failed to compute requests-by-provider-date")
+				return
+			}
+			result = append(result, row)
+		}
+		writeJSONResponse(w, map[string]interface{}{"rows": result, "range": rangeValue, "date": nullable(date)})
+	}
+}
+
+func usageDateWindow(rangeValue, date, startDate, endDate string, now time.Time) (string, string, error) {
+	format := "2006-01-02"
+	if date != "" {
+		if _, err := time.Parse(format, date); err != nil {
+			return "", "", err
+		}
+		return date + " 00:00:00", date + " 23:59:59", nil
+	}
+	if startDate != "" || endDate != "" {
+		startText := startDate
+		if startText == "" {
+			startText, _, _ = usageDateWindow(rangeValue, "", "", "", now)
+		}
+		start, err := time.Parse(time.RFC3339, startText)
+		if err != nil {
+			start, err = time.Parse("2006-01-02 15:04:05", startText)
+		}
+		if err != nil {
+			return "", "", err
+		}
+		endText := ""
+		if endDate != "" {
+			end, err := time.Parse(time.RFC3339, endDate)
+			if err != nil || end.Before(start) {
+				return "", "", fmt.Errorf("invalid dates")
+			}
+			endText = end.UTC().Format("2006-01-02 15:04:05")
+		}
+		return start.UTC().Format("2006-01-02 15:04:05"), endText, nil
+	}
+	var start time.Time
+	switch rangeValue {
+	case "1d":
+		start = now.AddDate(0, 0, -1)
+	case "7d":
+		start = now.AddDate(0, 0, -7)
+	case "30d":
+		start = now.AddDate(0, 0, -30)
+	case "90d":
+		start = now.AddDate(0, 0, -90)
+	case "ytd":
+		start = time.Date(now.Year(), 1, 1, 0, 0, 0, 0, time.UTC)
+	case "all":
+		return "", "", nil
+	default:
+		return "", "", fmt.Errorf("invalid range")
+	}
+	return start.Format("2006-01-02 15:04:05"), "", nil
+}

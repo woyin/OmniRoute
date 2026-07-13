@@ -8,10 +8,16 @@ import (
 	"database/sql"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/omniroute/omniroute/internal/auth"
 )
 
 // registerProvidersExtendedRoutes registers extended provider sub-routes inside the /api group.
 func registerProvidersExtendedRoutes(r chi.Router, dbConn *sql.DB) {
+	protected := r.With(auth.LoginMiddleware(dbConn))
+	protected.Get("/providers/{id}/param-filters", providerParamFiltersHandler(dbConn))
+	protected.Put("/providers/{id}/param-filters", providerParamFiltersHandler(dbConn))
+	protected.Delete("/providers/{id}/param-filters", providerParamFiltersHandler(dbConn))
+
 	// Provider auth import routes (Claude, AGY, Codex)
 	r.Get("/providers/claude-auth/import", placeholderHandler("providers/claude-auth/import"))
 	r.Post("/providers/claude-auth/import", placeholderHandler("providers/claude-auth/import"))

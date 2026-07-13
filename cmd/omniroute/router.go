@@ -670,7 +670,9 @@ func buildRouter(cfg *config.Config, dbConn *sql.DB) chi.Router {
 
 		// Models
 		r.Get("/models", (&handler.ModelsHandler{DB: dbConn}).ServeHTTP)
-		r.Get("/models/{model}", (&handler.ModelsHandler{DB: dbConn}).ServeHTTP)
+		r.Head("/models", (&handler.ModelsHandler{DB: dbConn}).ServeHTTP)
+		r.Get("/models/{path:.*}", (&handler.ModelsHandler{DB: dbConn}).ServeHTTP)
+		r.Head("/models/{path:.*}", (&handler.ModelsHandler{DB: dbConn}).ServeHTTP)
 
 		// Embeddings
 		r.Post("/embeddings", (&handler.EmbeddingsHandler{DB: dbConn, Config: cfg}).ServeHTTP)

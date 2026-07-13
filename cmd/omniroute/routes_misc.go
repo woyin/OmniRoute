@@ -144,6 +144,9 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Delete("/model-combo-mappings/{id}", modelComboMappingDetailHandler(dbConn))
 
 	// --- Models (public and management) ---
+	r.With(auth.LoginMiddleware(dbConn)).Get("/model-capability-overrides", modelCapabilityOverridesHandler(dbConn))
+	r.With(auth.LoginMiddleware(dbConn)).Patch("/model-capability-overrides", modelCapabilityOverridesHandler(dbConn))
+	r.With(auth.LoginMiddleware(dbConn)).Delete("/model-capability-overrides", modelCapabilityOverridesHandler(dbConn))
 	r.Get("/models/alias", modelAliasHandler(dbConn))
 	r.Put("/models/alias", modelAliasHandler(dbConn))
 	r.Delete("/models/alias", modelAliasHandler(dbConn))
