@@ -22,9 +22,14 @@ on:
         required: true
         default: true
         type: boolean
+      promote_latest:
+        description: Also publish latest
+        required: true
+        default: false
+        type: boolean
 
 concurrency:
-  group: docker-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  group: docker-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_type == 'tag' && github.ref_name || github.ref_name == 'go-rewrite' && 'edge' || github.ref_name == 'main' && 'edge-main' || github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -62,10 +67,18 @@ jobs:
       - name: Run persistence smoke
         run: scripts/ci/smoke-docker.sh omniroute-smoke:${{ matrix.suffix }}
 
+  publication-gate:
+    name: Test manifest platform checker
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: scripts/ci/test-check-image-platforms.sh
+
   publish-ghcr:
     name: Publish and verify GHCR
     if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.publish_ghcr)
-    needs: runtime-smoke
+    needs: [runtime-smoke, publication-gate]
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -88,12 +101,18 @@ jobs:
         id: tags
         env:
           DISPATCH_TAG: ${{ inputs.tag }}
+          PROMOTE_LATEST: ${{ inputs.promote_latest }}
         run: |
           image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          promote_latest=false
           if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
             tag=$DISPATCH_TAG
+            [ "$PROMOTE_LATEST" = true ] && promote_latest=true
           elif [ "$GITHUB_REF_TYPE" = tag ]; then
             tag=$GITHUB_REF_NAME
+            case "$tag" in
+              v*-go) case "$tag" in *-alpha*|*-beta*|*-rc*) ;; *) promote_latest=true;; esac ;;
+            esac
           elif [ "$GITHUB_REF_NAME" = go-rewrite ]; then
             tag=edge
           else
@@ -105,9 +124,7 @@ jobs:
             echo "primary=$image:$tag"
             echo 'tags<<EOF'
             echo "$image:$tag"
-            case "$tag" in
-              v*-go) case "$tag" in *-alpha*|*-beta*|*-rc*) ;; *) echo "$image:latest";; esac ;;
-            esac
+            [ "$promote_latest" = true ] && echo "$image:latest"
             echo EOF
           } >>"$GITHUB_OUTPUT"
 
@@ -127,7 +144,7 @@ jobs:
   publish-dockerhub:
     name: Publish and verify Docker Hub
     if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.publish_dockerhub)
-    needs: runtime-smoke
+    needs: [runtime-smoke, publication-gate]
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -148,13 +165,19 @@ jobs:
         id: tags
         env:
           DISPATCH_TAG: ${{ inputs.tag }}
+          PROMOTE_LATEST: ${{ inputs.promote_latest }}
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
         run: |
           image="${DOCKERHUB_USERNAME,,}/omniroute"
+          promote_latest=false
           if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
             tag=$DISPATCH_TAG
+            [ "$PROMOTE_LATEST" = true ] && promote_latest=true
           elif [ "$GITHUB_REF_TYPE" = tag ]; then
             tag=$GITHUB_REF_NAME
+            case "$tag" in
+              v*-go) case "$tag" in *-alpha*|*-beta*|*-rc*) ;; *) promote_latest=true;; esac ;;
+            esac
           elif [ "$GITHUB_REF_NAME" = go-rewrite ]; then
             tag=edge
           else
@@ -165,9 +188,7 @@ jobs:
             echo "primary=$image:$tag"
             echo 'tags<<EOF'
             echo "$image:$tag"
-            case "$tag" in
-              v*-go) case "$tag" in *-alpha*|*-beta*|*-rc*) ;; *) echo "$image:latest";; esac ;;
-            esac
+            [ "$promote_latest" = true ] && echo "$image:latest"
             echo EOF
           } >>"$GITHUB_OUTPUT"
 
