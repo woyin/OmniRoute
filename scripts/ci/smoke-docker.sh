@@ -20,6 +20,7 @@ negative_container="omniroute-smoke-negative-$suffix"
 volume="omniroute-smoke-$suffix"
 readonly_dir=$(mktemp -d "${TMPDIR:-/tmp}/omniroute-smoke.XXXXXX")
 port=
+sentinel="$(date +%s)$$"
 
 cleanup() {
   docker rm -f "$container" "$negative_container" >/dev/null 2>&1 || true
@@ -55,16 +56,26 @@ wait_healthy() {
 
 start_container() {
   docker run -d --name "$container" -p 127.0.0.1::3456 -v "$volume:/app/data" "$image" >/dev/null
-  port=$(docker port "$container" 3456/tcp | sed 's/.*://')
+  port=$(docker inspect -f '{{if eq (len (index .NetworkSettings.Ports "3456/tcp")) 1}}{{(index (index .NetworkSettings.Ports "3456/tcp") 0).HostPort}}{{end}}' "$container")
+  case "$port" in
+    ''|*[!0-9]*) printf 'failed to resolve single container port: %s\n' "$port" >&2; return 1 ;;
+  esac
 }
 
 docker volume create "$volume" >/dev/null
 start_container
 wait_healthy
-docker run --rm -v "$volume:/data" --entrypoint /bin/sh "$image" -c 'test -f /data/storage.sqlite'
+docker run --rm -e SENTINEL="$sentinel" -v "$volume:/data" --entrypoint /bin/sh "$image" -c \
+  'sqlite3 -cmd ".timeout 5000" /data/storage.sqlite "CREATE TABLE IF NOT EXISTS _omniroute_persistence_smoke (value TEXT NOT NULL); DELETE FROM _omniroute_persistence_smoke; INSERT INTO _omniroute_persistence_smoke(value) VALUES ($SENTINEL);"'
 docker rm -f "$container" >/dev/null
 start_container
 wait_healthy
+persisted=$(docker run --rm -v "$volume:/data" --entrypoint sqlite3 "$image" /data/storage.sqlite \
+  'SELECT value FROM _omniroute_persistence_smoke LIMIT 1;')
+if [ "$persisted" != "$sentinel" ]; then
+  printf 'SQLite persistence mismatch: expected %s, got %s\n' "$sentinel" "$persisted" >&2
+  exit 1
+fi
 
 chmod 555 "$readonly_dir"
 if docker run --name "$negative_container" -v "$readonly_dir:/app/data" "$image" >"$readonly_dir.out" 2>&1; then
