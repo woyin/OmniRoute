@@ -3,149 +3,123 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*-go"
 
 permissions:
-  contents: write
-  packages: write
+  contents: read
 
 jobs:
   build-linux:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: "1.24"
 
-      - name: Install cross-compilation toolchain
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libsqlite3-dev \
-            gcc-aarch64-linux-gnu libc6-dev-arm64-cross \
-            gcc-x86-64-linux-gnu libc6-dev-amd64-cross
-
-      - name: Build linux/amd64
+      - name: Build and smoke-test linux/${{ matrix.arch }}
         env:
           CGO_ENABLED: 1
-          CC: x86_64-linux-gnu-gcc
+          GOARCH: ${{ matrix.arch }}
         run: |
-          GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o omniroute_linux_amd64 ./cmd/omniroute
-
-      - name: Build linux/arm64
-        env:
-          CGO_ENABLED: 1
-          CC: aarch64-linux-gnu-gcc
-        run: |
-          GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o omniroute_linux_arm64 ./cmd/omniroute
+          go build -trimpath -ldflags="-s -w" -o omniroute_linux_${GOARCH} ./cmd/omniroute
+          ./omniroute_linux_${GOARCH} --smoke-sqlite
 
       - uses: actions/upload-artifact@v4
         with:
-          name: omniroute-linux
-          path: omniroute_linux_*
+          name: omniroute-linux-${{ matrix.arch }}
+          path: omniroute_linux_${{ matrix.arch }}
 
   build-darwin:
-    runs-on: macos-latest
+    strategy:
+      matrix:
+        include:
+          - runner: macos-15-intel
+            arch: amd64
+          - runner: macos-14
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: "1.24"
 
-      - name: Build darwin/arm64
+      - name: Build and smoke-test darwin/${{ matrix.arch }}
         env:
           CGO_ENABLED: 1
+          GOARCH: ${{ matrix.arch }}
         run: |
-          GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o omniroute_darwin_arm64 ./cmd/omniroute
-
-      - name: Build darwin/amd64
-        env:
-          CGO_ENABLED: 1
-        run: |
-          GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o omniroute_darwin_amd64 ./cmd/omniroute
+          go build -trimpath -ldflags="-s -w" -o omniroute_darwin_${GOARCH} ./cmd/omniroute
+          ./omniroute_darwin_${GOARCH} --smoke-sqlite
 
       - uses: actions/upload-artifact@v4
         with:
-          name: omniroute-darwin
-          path: omniroute_darwin_*
+          name: omniroute-darwin-${{ matrix.arch }}
+          path: omniroute_darwin_${{ matrix.arch }}
 
   build-windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: "1.24"
 
-      - name: Build windows/amd64
+      - name: Install MinGW-w64
+        run: choco install mingw --no-progress -y
+
+      - name: Build and smoke-test windows/amd64
+        shell: pwsh
         env:
-          CGO_ENABLED: 0
+          CGO_ENABLED: 1
+          GOARCH: amd64
+          CC: gcc
         run: |
           go build -trimpath -ldflags="-s -w" -o omniroute_windows_amd64.exe ./cmd/omniroute
-
-      - name: Build windows/arm64
-        env:
-          CGO_ENABLED: 0
-          GOARCH: arm64
-        run: |
-          go build -trimpath -ldflags="-s -w" -o omniroute_windows_arm64.exe ./cmd/omniroute
+          .\omniroute_windows_amd64.exe --smoke-sqlite
 
       - uses: actions/upload-artifact@v4
         with:
-          name: omniroute-windows
-          path: omniroute_windows_*
+          name: omniroute-windows-amd64
+          path: omniroute_windows_amd64.exe
 
   release:
     needs: [build-linux, build-darwin, build-windows]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
-
-      - name: List artifacts
-        run: find artifacts -type f | sort
-
-      - name: Create checksums
-        run: |
-          cd artifacts
-          find . -type f -not -name "checksums.txt" | sort | xargs sha256sum > ../checksums.txt
-          mv ../checksums.txt .
+          merge-multiple: true
 
       - name: Create release archives
+        env:
+          VERSION: ${{ github.ref_name }}
         run: |
-          VERSION=${GITHUB_REF_NAME}
-          mkdir -p release
+          mkdir release
+          tar czf "release/omniroute_${VERSION}_linux_x86_64.tar.gz" -C artifacts omniroute_linux_amd64
+          tar czf "release/omniroute_${VERSION}_linux_aarch64.tar.gz" -C artifacts omniroute_linux_arm64
+          tar czf "release/omniroute_${VERSION}_darwin_x86_64.tar.gz" -C artifacts omniroute_darwin_amd64
+          tar czf "release/omniroute_${VERSION}_darwin_aarch64.tar.gz" -C artifacts omniroute_darwin_arm64
+          (cd artifacts && zip "../release/omniroute_${VERSION}_windows_x86_64.zip" omniroute_windows_amd64.exe)
 
-          # Linux
-          tar czf release/omniroute_${VERSION}_linux_x86_64.tar.gz -C artifacts/omniroute-linux omniroute_linux_amd64
-          tar czf release/omniroute_${VERSION}_linux_aarch64.tar.gz -C artifacts/omniroute-linux omniroute_linux_arm64
-
-          # Darwin
-          tar czf release/omniroute_${VERSION}_darwin_x86_64.tar.gz -C artifacts/omniroute-darwin omniroute_darwin_amd64
-          tar czf release/omniroute_${VERSION}_darwin_aarch64.tar.gz -C artifacts/omniroute-darwin omniroute_darwin_arm64
-
-          # Windows
-          cd artifacts/omniroute-windows
-          zip ../../release/omniroute_${VERSION}_windows_x86_64.zip omniroute_windows_amd64.exe
-          zip ../../release/omniroute_${VERSION}_windows_aarch64.zip omniroute_windows_arm64.exe
-          cd ../..
-
-          # Checksums
-          cp artifacts/checksums.txt release/
+      - name: Verify release assets
+        run: scripts/ci/verify-release-assets.sh release "${GITHUB_REF_NAME}"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
