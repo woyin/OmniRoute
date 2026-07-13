@@ -153,4 +153,4 @@ jobs:
           files: release/*
           generate_release_notes: true
           draft: false
-          prerelease: ${{ contains(GITHUB_REF_NAME, '-rc') || contains(GITHUB_REF_NAME, '-beta') || contains(GITHUB_REF_NAME, '-go') }}
+          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-go') }}
