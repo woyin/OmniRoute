@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/omniroute/omniroute/internal/db"
 	"github.com/omniroute/omniroute/internal/provider/registry"
 )
@@ -180,5 +181,130 @@ func providerBatchTestHandler(dbConn *sql.DB) http.HandlerFunc {
 			}
 		}
 		writeJSONResponse(w, map[string]interface{}{"mode": body.Mode, "providerId": nullable(body.ProviderID), "results": results, "testedAt": time.Now().UTC().Format(time.RFC3339), "summary": map[string]int{"total": len(results), "passed": passed, "failed": len(results) - passed}})
+	}
+}
+
+func providerHealthAutopilotHandler(dbConn *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		provider := r.URL.Query().Get("provider")
+		includeHealthy := r.URL.Query().Get("includeHealthy") == "true" || r.URL.Query().Get("includeHealthy") == "1"
+		includeActions := r.URL.Query().Get("includeActions") != "false" && r.URL.Query().Get("includeActions") != "0"
+		connections, err := db.ListProviderConnections(dbConn, provider)
+		if err != nil {
+			jsonError(w, http.StatusInternalServerError, "Failed to build provider health autopilot report")
+			return
+		}
+		items := make([]map[string]interface{}, 0)
+		unhealthy := 0
+		for _, c := range connections {
+			healthy := c.IsActive && c.TestStatus != "failed" && tokenStatus(c.ExpiresAt) != "expired"
+			if !healthy {
+				unhealthy++
+			}
+			if healthy && !includeHealthy {
+				continue
+			}
+			item := map[string]interface{}{"provider": c.Provider, "connectionId": c.ID, "name": c.Name, "healthy": healthy, "testStatus": c.TestStatus, "tokenStatus": tokenStatus(c.ExpiresAt)}
+			if includeActions && !healthy {
+				item["actions"] = []map[string]interface{}{{"type": "reactivate_connection", "target": map[string]string{"provider": c.Provider, "connectionId": c.ID}}}
+			}
+			items = append(items, item)
+		}
+		writeJSONResponse(w, map[string]interface{}{"generatedAt": time.Now().UTC().Format(time.RFC3339), "summary": map[string]int{"connectionCount": len(connections), "unhealthyCount": unhealthy}, "connections": items})
+	}
+}
+
+func providerRefreshHandler(dbConn *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		c, err := db.GetProviderConnection(dbConn, id)
+		if err != nil {
+			jsonError(w, 500, "Token refresh failed")
+			return
+		}
+		if c == nil {
+			jsonError(w, 404, "Connection not found")
+			return
+		}
+		entry := registry.Get(c.Provider)
+		if entry == nil || entry.AuthType != registry.AuthTypeOAuth {
+			jsonError(w, 400, "Only OAuth connections support manual token refresh")
+			return
+		}
+		if c.RefreshToken == "" && c.AccessToken == "" {
+			jsonError(w, 422, "No token credentials available for refresh")
+			return
+		}
+		writeJSONResponse(w, map[string]interface{}{"success": true, "skipped": true, "connectionId": id, "provider": c.Provider, "message": "Token refreshes automatically on the next request.", "expiresAt": nullable(c.ExpiresAt), "refreshedAt": time.Now().UTC().Format(time.RFC3339)})
+	}
+}
+
+func providerSyncModelsHandler(dbConn *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		c, err := db.GetProviderConnection(dbConn, id)
+		if err != nil {
+			jsonError(w, 500, "Failed to sync models")
+			return
+		}
+		if c == nil {
+			jsonError(w, 404, "Connection not found")
+			return
+		}
+		entry := registry.Get(c.Provider)
+		if entry == nil {
+			jsonError(w, 400, "Invalid connection provider")
+			return
+		}
+		models := make([]map[string]interface{}, 0, len(entry.Models))
+		for _, m := range entry.Models {
+			models = append(models, map[string]interface{}{"id": m.ID, "name": m.Name, "source": "local_catalog"})
+		}
+		writeJSONResponse(w, map[string]interface{}{"success": true, "provider": c.Provider, "connectionId": id, "models": models, "changes": map[string]int{"added": 0, "removed": 0, "updated": 0, "total": 0}})
+	}
+}
+
+func providerBulkHandler(dbConn *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Provider string `json:"provider"`
+			Entries  []struct {
+				Name   string `json:"name"`
+				APIKey string `json:"apiKey"`
+			} `json:"entries"`
+			Priority int `json:"priority"`
+		}
+		if json.NewDecoder(r.Body).Decode(&body) != nil {
+			jsonError(w, 400, "Invalid JSON body")
+			return
+		}
+		if registry.Get(body.Provider) == nil {
+			jsonError(w, 400, "Invalid provider")
+			return
+		}
+		if len(body.Entries) == 0 {
+			jsonError(w, 400, "entries are required")
+			return
+		}
+		created := make([]map[string]interface{}, 0)
+		errors := make([]map[string]interface{}, 0)
+		for i, e := range body.Entries {
+			if e.Name == "" || e.APIKey == "" {
+				errors = append(errors, map[string]interface{}{"index": i, "name": e.Name, "message": "name and apiKey are required"})
+				continue
+			}
+			id := uuid.NewString()
+			priority := body.Priority
+			if priority == 0 {
+				priority = 1
+			}
+			pc := db.ProviderConnection{ID: id, Provider: body.Provider, Name: e.Name, APIKey: e.APIKey, IsActive: true, TestStatus: "unknown", Priority: priority}
+			if err := db.SaveProviderConnection(dbConn, pc); err != nil {
+				errors = append(errors, map[string]interface{}{"index": i, "name": e.Name, "message": "Failed to create connection"})
+				continue
+			}
+			created = append(created, map[string]interface{}{"id": id, "provider": body.Provider, "name": e.Name, "isActive": true, "testStatus": "unknown", "priority": priority})
+		}
+		writeJSONResponse(w, map[string]interface{}{"success": len(created), "failed": len(errors), "total": len(body.Entries), "created": created, "errors": errors})
 	}
 }
