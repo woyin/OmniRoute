@@ -164,8 +164,11 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 
 	// --- Playground ---
 	r.Post("/playground/improve-prompt", placeholderHandler("playground/improve-prompt"))
-	r.Get("/playground/presets", playgroundPresetsHandler())
-	r.Get("/playground/presets/{id}", placeholderHandler("playground/presets/detail"))
+	r.Get("/playground/presets", playgroundPresetsHandler(dbConn))
+	r.Post("/playground/presets", playgroundPresetsHandler(dbConn))
+	r.Get("/playground/presets/{id}", playgroundPresetsHandler(dbConn))
+	r.Put("/playground/presets/{id}", playgroundPresetsHandler(dbConn))
+	r.Delete("/playground/presets/{id}", playgroundPresetsHandler(dbConn))
 	r.Post("/playground/simulate-route", placeholderHandler("playground/simulate-route"))
 
 	// --- Plugins ---

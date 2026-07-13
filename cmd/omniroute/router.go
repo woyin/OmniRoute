@@ -374,7 +374,7 @@ func buildRouter(cfg *config.Config, dbConn *sql.DB) chi.Router {
 		r.Post("/intelligence/sync", intelligenceSyncHandler())
 
 		// Playground
-		r.Get("/playground/presets", playgroundPresetsHandler())
+		r.Get("/playground/presets", playgroundPresetsHandler(dbConn))
 
 		// Headroom
 		r.Post("/headroom/start", func(w http.ResponseWriter, r *http.Request) {
