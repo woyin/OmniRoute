@@ -15,12 +15,13 @@ RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-s -w" -o /omniroute ./cmd/omnir
 # ---- Runtime stage ----
 FROM alpine:3.20
 
-RUN apk add --no-cache ca-certificates sqlite-libs tzdata \
+RUN apk add --no-cache ca-certificates sqlite-libs tzdata wget \
     && adduser -D -h /app omniroute
 
 WORKDIR /app
 
 COPY --from=builder /omniroute /app/omniroute
+COPY --chmod=755 scripts/check-data-dir.sh /app/check-data-dir.sh
 
 RUN mkdir -p /app/data && chown omniroute:omniroute /app/data
 
@@ -31,4 +32,8 @@ EXPOSE 3456
 ENV DATA_DIR=/app/data
 ENV PORT=3456
 
-ENTRYPOINT ["/app/omniroute"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget -qO- --timeout=4 http://127.0.0.1:3456/health | grep -q '"status":"ok"'
+
+ENTRYPOINT ["/app/check-data-dir.sh"]
+CMD ["/app/omniroute"]
