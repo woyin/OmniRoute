@@ -18,7 +18,7 @@ import (
 func registerUsageRoutes(r chi.Router, dbConn *sql.DB) {
 	// Usage budget
 	r.Get("/usage/budget", placeholderHandler("usage/budget"))
-	r.Post("/usage/budget/bulk", placeholderHandler("usage/budget/bulk"))
+	r.Get("/usage/budget/bulk", placeholderHandler("usage/budget/bulk"))
 
 	// Call logs
 	r.Get("/usage/call-logs", usageCallLogsHandler(dbConn))
@@ -53,7 +53,9 @@ func registerUsageRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Get("/usage/route-explain/{id}", usageRouteExplainHandler(dbConn))
 
 	// Token limits
-	r.Get("/usage/token-limits", placeholderHandler("usage/token-limits"))
+	r.Get("/usage/token-limits", usageTokenLimitsHandler(dbConn))
+	r.Post("/usage/token-limits", usageTokenLimitsHandler(dbConn))
+	r.Delete("/usage/token-limits", usageTokenLimitsHandler(dbConn))
 
 	// Utilization
 	r.Get("/usage/utilization", usageUtilizationHandler(dbConn))

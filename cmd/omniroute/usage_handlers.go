@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"regexp"
 	"sort"
@@ -284,4 +285,108 @@ func usageUtilizationHandler(dbConn *sql.DB) http.HandlerFunc {
 		sort.Strings(providers)
 		writeJSONResponse(w, map[string]interface{}{"timeRange": rangeValue, "bucketSizeMinutes": bucket, "providers": providers, "data": data})
 	}
+}
+
+type tokenLimitRequest struct {
+	ID            string `json:"id"`
+	APIKeyID      string `json:"apiKeyId"`
+	ScopeType     string `json:"scopeType"`
+	ScopeValue    string `json:"scopeValue"`
+	TokenLimit    int64  `json:"tokenLimit"`
+	ResetInterval string `json:"resetInterval"`
+	ResetTime     string `json:"resetTime"`
+	Enabled       *bool  `json:"enabled"`
+}
+
+func usageTokenLimitsHandler(dbConn *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			apiKeyID := r.URL.Query().Get("apiKeyId")
+			if apiKeyID == "" {
+				jsonError(w, http.StatusBadRequest, "apiKeyId query param is required")
+				return
+			}
+			limits, err := db.ListTokenLimits(dbConn, apiKeyID)
+			if err != nil {
+				jsonError(w, http.StatusInternalServerError, "Failed to list token limits")
+				return
+			}
+			now := time.Now()
+			result := make([]map[string]interface{}, 0, len(limits))
+			for _, limit := range limits {
+				start, next, err := db.TokenLimitWindow(limit, now)
+				if err != nil {
+					jsonError(w, http.StatusInternalServerError, "Failed to calculate token limit window")
+					return
+				}
+				item := map[string]interface{}{
+					"id": limit.ID, "apiKeyId": limit.APIKeyID, "scopeType": limit.ScopeType,
+					"scopeValue": limit.ScopeValue, "tokenLimit": limit.TokenLimit,
+					"resetInterval": limit.ResetInterval, "resetTime": limit.ResetTime,
+					"enabled": limit.Enabled, "createdAt": limit.CreatedAt, "updatedAt": limit.UpdatedAt,
+					"tokensUsed": int64(0), "windowStart": fmt.Sprint(start.UnixMilli()),
+					"periodStartAt": start.UnixMilli(), "nextResetAt": next.UnixMilli(),
+					"remaining": limit.TokenLimit,
+				}
+				result = append(result, item)
+			}
+			writeJSONResponse(w, map[string]interface{}{"apiKeyId": apiKeyID, "limits": result})
+		case http.MethodPost:
+			var body tokenLimitRequest
+			decoder := json.NewDecoder(r.Body)
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&body); err != nil {
+				jsonError(w, http.StatusBadRequest, "Invalid JSON body")
+				return
+			}
+			if body.APIKeyID == "" || body.TokenLimit <= 0 || !validTokenLimitScope(body.ScopeType) ||
+				(body.ScopeType != "global" && body.ScopeValue == "") {
+				jsonError(w, http.StatusBadRequest, "Invalid request")
+				return
+			}
+			if body.ResetInterval == "" {
+				body.ResetInterval = "monthly"
+			}
+			if body.ResetTime == "" {
+				body.ResetTime = "00:00"
+			}
+			enabled := true
+			if body.Enabled != nil {
+				enabled = *body.Enabled
+			}
+			limit := db.TokenLimit{ID: body.ID, APIKeyID: body.APIKeyID, ScopeType: body.ScopeType,
+				ScopeValue: body.ScopeValue, TokenLimit: body.TokenLimit, ResetInterval: body.ResetInterval,
+				ResetTime: body.ResetTime, Enabled: enabled}
+			if _, _, err := db.TokenLimitWindow(limit, time.Now()); err != nil {
+				jsonError(w, http.StatusBadRequest, "Invalid request")
+				return
+			}
+			persisted, err := db.UpsertTokenLimit(dbConn, limit)
+			if err != nil {
+				jsonError(w, http.StatusInternalServerError, "Failed to set token limit")
+				return
+			}
+			writeJSONResponse(w, map[string]interface{}{"success": true, "limit": persisted})
+		case http.MethodDelete:
+			id := r.URL.Query().Get("id")
+			if id == "" {
+				jsonError(w, http.StatusBadRequest, "id query param is required")
+				return
+			}
+			deleted, err := db.DeleteTokenLimit(dbConn, id)
+			if err != nil {
+				jsonError(w, http.StatusInternalServerError, "Failed to delete token limit")
+				return
+			}
+			if !deleted {
+				w.WriteHeader(http.StatusNotFound)
+			}
+			writeJSONResponse(w, map[string]interface{}{"success": deleted})
+		}
+	}
+}
+
+func validTokenLimitScope(scope string) bool {
+	return scope == "model" || scope == "provider" || scope == "global"
 }
