@@ -47,13 +47,11 @@ jobs:
           curl -fsS http://127.0.0.1:3456/health
           docker exec omniroute-smoke test -w /app/data
           docker exec omniroute-smoke test -s /app/data/omniroute.db
-          before=$(docker exec omniroute-smoke sqlite3 /app/data/omniroute.db 'PRAGMA quick_check;')
-          test "$before" = ok
+          docker exec -e OMNIROUTE_SMOKE_TEST=sqlite -e DATA_DIR=/app/data omniroute-smoke /app/omniroute
           docker rm -f omniroute-smoke
           docker run -d --name omniroute-smoke -e JWT_SECRET=smoke-secret-at-least-32-bytes-long -p 3456:3456 -v "$volume:/app/data" omniroute:smoke
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:3456/health && break; sleep 1; done
-          after=$(docker exec omniroute-smoke sqlite3 /app/data/omniroute.db 'PRAGMA quick_check;')
-          test "$after" = ok
+          docker exec -e OMNIROUTE_SMOKE_TEST=sqlite -e DATA_DIR=/app/data omniroute-smoke /app/omniroute
 
   publish-ghcr:
     needs: smoke
