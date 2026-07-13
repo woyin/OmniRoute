@@ -389,11 +389,6 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Post("/tunnels/tailscale/start-daemon", placeholderHandler("tunnels/tailscale/start-daemon"))
 	r.Get("/tunnels/tailscale/status", placeholderHandler("tunnels/tailscale/status"))
 
-	// --- Upstream proxy ---
-	r.Get("/upstream-proxy", placeholderHandler("upstream-proxy"))
-	r.Delete("/upstream-proxy/{providerId}", placeholderHandler("upstream-proxy/delete"))
-	r.Post("/upstream-proxy/{providerId}", placeholderHandler("upstream-proxy/update"))
-
 	// --- Version manager ---
 	r.Get("/version-manager/status", versionManagerStatusHandler())
 	r.Post("/version-manager/check-update", versionManagerCheckUpdateHandler())

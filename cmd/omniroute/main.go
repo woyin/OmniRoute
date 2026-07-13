@@ -406,10 +406,9 @@ func main() {
 		r.Get("/rate-limits", mgmtRateLimit.List)
 		r.Post("/rate-limits", mgmtRateLimit.Create)
 
-		// Upstream proxy
-		r.Get("/upstream-proxy", mgmtUpstreamProxy.List)
-		r.Post("/upstream-proxy", mgmtUpstreamProxy.Create)
+		// Upstream proxy (matches main branch per-provider API)
 		r.Get("/upstream-proxy/{providerId}", mgmtUpstreamProxy.Get)
+		r.Put("/upstream-proxy/{providerId}", mgmtUpstreamProxy.Upsert)
 		r.Delete("/upstream-proxy/{providerId}", mgmtUpstreamProxy.Delete)
 
 		// Plugins

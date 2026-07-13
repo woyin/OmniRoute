@@ -66,6 +66,7 @@ func runMigrations(db *sql.DB) error {
 		{"001_initial_schema", schemaV1},
 		{"002_provider_nodes", schemaV2},
 		{"003_critical_tables", schemaV3},
+		{"004_upstream_proxy_parity", schemaV4},
 	}
 
 	for _, m := range migrations {
@@ -107,6 +108,7 @@ func LoadSQL(name string) (string, error) {
 }
 
 var schemaV3 = migrations.SchemaV3
+var schemaV4 = migrations.SchemaV4
 
 const schemaV1 = `
 CREATE TABLE IF NOT EXISTS provider_connections (
