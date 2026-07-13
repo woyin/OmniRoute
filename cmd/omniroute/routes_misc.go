@@ -59,11 +59,6 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Post("/batches", placeholderHandler("batches"))
 
 	// --- Cache ---
-	r.Get("/cache", placeholderHandler("cache"))
-	r.Delete("/cache", placeholderHandler("cache"))
-	r.Get("/cache/stats", placeholderHandler("cache/stats"))
-	r.Get("/cache/entries", placeholderHandler("cache/entries"))
-	r.Get("/cache/reasoning", placeholderHandler("cache/reasoning"))
 
 	// --- CLI connect/tokens/whoami ---
 	r.Post("/cli/connect", cliConnectHandler())
@@ -78,10 +73,7 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Post("/copilot/chat", copilotChatHandler(dbConn, nil))
 
 	// --- DB backups ---
-	r.Get("/db-backups", placeholderHandler("db-backups"))
-	r.Post("/db-backups/export", placeholderHandler("db-backups/export"))
 	r.Post("/db-backups/exportAll", placeholderHandler("db-backups/exportAll"))
-	r.Post("/db-backups/import", placeholderHandler("db-backups/import"))
 
 	// --- Discovery ---
 	r.Post("/discovery/scan", discoveryScanHandler())
@@ -94,16 +86,14 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Get("/docs/codex-cli", docsCodexCLIHandler())
 
 	// --- Evals ---
-	r.Get("/evals", placeholderHandler("evals"))
-	r.Post("/evals", placeholderHandler("evals"))
-	r.Get("/evals/suites", placeholderHandler("evals/suites"))
-	r.Post("/evals/suites", placeholderHandler("evals/suites"))
-	r.Get("/evals/suites/{suiteId}", placeholderHandler("evals/suites/detail"))
-	r.Get("/evals/{suiteId}", placeholderHandler("evals/detail"))
+	r.Post("/evals", evalRunHandler(dbConn))
+	r.Post("/evals/suites", evalSuiteCollectionHandler(dbConn))
+	r.Get("/evals/suites/{suiteId}", evalSuiteDetailHandler(dbConn))
+	r.Put("/evals/suites/{suiteId}", evalSuiteDetailHandler(dbConn))
+	r.Delete("/evals/suites/{suiteId}", evalSuiteDetailHandler(dbConn))
+	r.Get("/evals/{suiteId}", evalSuitePublicDetailHandler(dbConn))
 
 	// --- Fallback chains ---
-	r.Get("/fallback/chains", placeholderHandler("fallback/chains"))
-	r.Post("/fallback/chains", placeholderHandler("fallback/chains"))
 
 	// --- Files ---
 	r.Post("/files", placeholderHandler("files"))
@@ -118,12 +108,8 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Get("/github-skills", githubSkillsHandler(dbConn))
 
 	// --- Guardrails ---
-	r.Get("/guardrails", placeholderHandler("guardrails"))
-	r.Post("/guardrails", placeholderHandler("guardrails"))
-	r.Post("/guardrails/test", placeholderHandler("guardrails/test"))
 
 	// --- Health (degradation) ---
-	r.Get("/health/degradation", placeholderHandler("health/degradation"))
 	r.Get("/health/ping", healthPingHandler())
 
 	// --- Intelligence ---
@@ -138,10 +124,6 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Post("/local/redis/stop", localRedisStopHandler())
 
 	// --- Logs ---
-	r.Get("/logs/{id}", placeholderHandler("logs/detail"))
-	r.Get("/logs/console", placeholderHandler("logs/console"))
-	r.Get("/logs/detail", placeholderHandler("logs/detail"))
-	r.Post("/logs/export", placeholderHandler("logs/export"))
 
 	// --- MCP audit stats ---
 	r.Get("/mcp/audit/stats", mcpAuditStatsHandler(nil))
@@ -159,20 +141,22 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	// --- Model combo mappings ---
 	r.Get("/model-combo-mappings", modelComboMappingsListHandler(dbConn))
 	r.Post("/model-combo-mapping", modelComboMappingsCreateHandler(dbConn))
-	r.Get("/model-combo-mappings/{id}", placeholderHandler("model-combo-mapping/detail"))
+	r.Get("/model-combo-mappings/{id}", modelComboMappingDetailHandler(dbConn))
+	r.Put("/model-combo-mappings/{id}", modelComboMappingDetailHandler(dbConn))
+	r.Delete("/model-combo-mappings/{id}", modelComboMappingDetailHandler(dbConn))
 
 	// --- Models (public and management) ---
-	r.Get("/models/alias", placeholderHandler("models/alias"))
-	r.Get("/models/openrouter-catalog", placeholderHandler("models/openrouter-catalog"))
-	r.Post("/models/test", placeholderHandler("models/test"))
-	r.Post("/models/test-all", placeholderHandler("models/test-all"))
-	r.Get("/models/{model}", placeholderHandler("models/detail"))
+	r.Get("/models/alias", modelAliasHandler(dbConn))
+	r.Put("/models/alias", modelAliasHandler(dbConn))
+	r.Delete("/models/alias", modelAliasHandler(dbConn))
+	r.Get("/models/openrouter-catalog", openRouterCatalogHandler())
+	r.Post("/models/test", modelTestHandler(dbConn))
+	r.Post("/models/test-all", modelTestAllHandler(dbConn))
+	r.Get("/models/{model}", modelDetailHandler())
 
 	// --- Monitoring ---
-	r.Get("/monitoring/health", placeholderHandler("monitoring/health"))
 
 	// --- Network ---
-	r.Get("/network/info", placeholderHandler("network/info"))
 
 	// --- OpenAPI ---
 	r.Get("/openapi/spec", openapiSpecHandler())
@@ -185,23 +169,20 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Post("/playground/simulate-route", placeholderHandler("playground/simulate-route"))
 
 	// --- Plugins ---
-	r.Get("/plugins", placeholderHandler("plugins"))
 	r.Post("/plugins", placeholderHandler("plugins"))
-	r.Get("/plugins/{name}", placeholderHandler("plugins/detail"))
-	r.Post("/plugins/{name}/activate", placeholderHandler("plugins/activate"))
-	r.Post("/plugins/{name}/config", placeholderHandler("plugins/config"))
-	r.Post("/plugins/{name}/deactivate", placeholderHandler("plugins/deactivate"))
-	r.Get("/plugins/marketplace", placeholderHandler("plugins/marketplace"))
-	r.Post("/plugins/scan", placeholderHandler("plugins/scan"))
+	r.Get("/plugins/{name}", pluginDetailHandler(dbConn))
+	r.Delete("/plugins/{name}", pluginDetailHandler(dbConn))
+	r.Post("/plugins/{name}/activate", pluginActivationHandler(dbConn, true))
+	r.Get("/plugins/{name}/config", pluginConfigHandler(dbConn))
+	r.Put("/plugins/{name}/config", pluginConfigHandler(dbConn))
+	r.Post("/plugins/{name}/deactivate", pluginActivationHandler(dbConn, false))
+	r.Get("/plugins/marketplace", pluginMarketplaceHandler())
+	r.Post("/plugins/scan", pluginScanHandler(dbConn))
 
 	// --- Policies ---
 	r.Get("/policies", policiesHandler(dbConn))
 
 	// --- Pricing ---
-	r.Get("/pricing", placeholderHandler("pricing"))
-	r.Get("/pricing/defaults", placeholderHandler("pricing/defaults"))
-	r.Get("/pricing/models", placeholderHandler("pricing/models"))
-	r.Post("/pricing/sync", placeholderHandler("pricing/sync"))
 
 	// --- Provider nodes ---
 	r.Get("/provider-nodes", providerNodesListHandler(dbConn))
@@ -225,15 +206,12 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Post("/quota/preview", quotaPreviewHandler(dbConn))
 
 	// --- Rate limit ---
-	r.Get("/rate-limit", placeholderHandler("rate-limit"))
-	r.Get("/rate-limits", placeholderHandler("rate-limits"))
 
 	// --- Relay tokens ---
 	r.Get("/relay/tokens", relayTokensListHandler(dbConn))
 	r.Get("/relay/tokens/{id}", relayTokenDetailHandler(dbConn))
 
 	// --- Resilience ---
-	r.Get("/resilience", placeholderHandler("resilience"))
 	r.Get("/resilience/model-cooldowns", placeholderHandler("resilience/model-cooldowns"))
 	r.Post("/resilience/reset", placeholderHandler("resilience/reset"))
 
@@ -290,16 +268,15 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Get("/session-pools/{provider}", sessionPoolDetailHandler(dbConn))
 
 	// --- Sessions ---
-	r.Get("/sessions", placeholderHandler("sessions"))
-	r.Post("/sessions", placeholderHandler("sessions"))
-	r.Delete("/sessions/{id}", placeholderHandler("sessions/delete"))
+	r.Post("/sessions", sessionCreateHandler(dbConn))
 
 	// --- Skills ---
 	r.Get("/skills", skillsListHandler(dbConn))
 	r.Post("/skills", skillsCreateHandler(dbConn))
 	r.Get("/skills/{id}", skillsDeleteHandler(dbConn))
-	r.Post("/skills/{id}", placeholderHandler("skills/update"))
-	r.Get("/skills/executions", placeholderHandler("skills/executions"))
+	r.Put("/skills/{id}", skillUpdateHandler(dbConn))
+	r.Get("/skills/executions", skillExecutionsHandler(dbConn))
+	r.Post("/skills/executions", skillExecutionsHandler(dbConn))
 	r.Post("/skills/install", placeholderHandler("skills/install"))
 	r.Get("/skills/marketplace", placeholderHandler("skills/marketplace"))
 	r.Post("/skills/marketplace/install", placeholderHandler("skills/marketplace/install"))
@@ -307,30 +284,26 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Post("/skills/skillssh/install", placeholderHandler("skills/skillssh/install"))
 
 	// --- Storage health ---
-	r.Get("/storage/health", placeholderHandler("storage/health"))
 
 	// --- Sync ---
-	r.Get("/sync/bundle", placeholderHandler("sync/bundle"))
+	r.Get("/sync/bundle", syncBundleHandler(dbConn))
 	r.Post("/sync/cloud", placeholderHandler("sync/cloud"))
 	r.Post("/sync/initialize", syncInitializeHandler())
 	r.Get("/sync/tokens", syncTokensListHandler())
-	r.Get("/sync/tokens/{id}", placeholderHandler("sync/tokens/detail"))
+	r.Delete("/sync/tokens/{id}", syncTokenDetailHandler(dbConn))
 
 	// --- Synced available models ---
 	r.Get("/synced-available-models", syncedAvailableModelsHandler(dbConn))
 
 	// --- System ---
 	r.Get("/system/env/repair", placeholderHandler("system/env/repair"))
-	r.Get("/system/version", placeholderHandler("system/version"))
 
 	// --- Tags ---
 	r.Get("/tags", tagsListHandler())
 
 	// --- Telemetry ---
-	r.Get("/telemetry/summary", placeholderHandler("telemetry/summary"))
 
 	// --- Token health ---
-	r.Get("/token-health", placeholderHandler("token-health"))
 
 	// --- Tools / Agent Bridge ---
 	r.Get("/tools/agent-bridge/agents", agentBridgeAgentsListHandler(dbConn))
@@ -380,14 +353,11 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	// --- Tunnels ---
 	r.Post("/tunnels/cloudflared", placeholderHandler("tunnels/cloudflared"))
 	r.Post("/tunnels/ngrok", placeholderHandler("tunnels/ngrok"))
-	r.Get("/tunnels/tailscale", placeholderHandler("tunnels/tailscale"))
-	r.Get("/tunnels/tailscale/check", placeholderHandler("tunnels/tailscale/check"))
-	r.Post("/tunnels/tailscale/disable", placeholderHandler("tunnels/tailscale/disable"))
-	r.Post("/tunnels/tailscale/enable", placeholderHandler("tunnels/tailscale/enable"))
-	r.Post("/tunnels/tailscale/install", placeholderHandler("tunnels/tailscale/install"))
-	r.Post("/tunnels/tailscale/login", placeholderHandler("tunnels/tailscale/login"))
-	r.Post("/tunnels/tailscale/start-daemon", placeholderHandler("tunnels/tailscale/start-daemon"))
-	r.Get("/tunnels/tailscale/status", placeholderHandler("tunnels/tailscale/status"))
+	r.Get("/tunnels/tailscale", tailscaleCheckHandler())
+	r.Get("/tunnels/tailscale/check", tailscaleCheckHandler())
+	r.Post("/tunnels/tailscale/install", tailscaleInstallHandler())
+	r.Post("/tunnels/tailscale/login", tailscaleLoginHandler())
+	r.Post("/tunnels/tailscale/start-daemon", tailscaleCommandHandler("status"))
 
 	// --- Version manager ---
 	r.Get("/version-manager/status", versionManagerStatusHandler())
@@ -402,9 +372,9 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Post("/webhooks", webhooksCreateHandler(dbConn))
 	r.Get("/webhooks/{id}", webhooksDeleteHandler(dbConn))
 	r.Delete("/webhooks/{id}", webhooksDeleteHandler(dbConn))
-	r.Get("/webhooks/{id}/deliveries", placeholderHandler("webhooks/deliveries"))
+	r.Get("/webhooks/{id}/deliveries", webhookDeliveriesHandler(dbConn))
 	r.Post("/webhooks/{id}/test", webhooksTestHandler(dbConn))
-	r.Post("/webhooks/validate-url", placeholderHandler("webhooks/validate-url"))
+	r.Post("/webhooks/validate-url", webhookValidateURLHandler())
 
 	// --- Shutdown ---
 	r.Post("/shutdown", restartHandler())
@@ -413,8 +383,8 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Get("/cloud/models/alias", placeholderHandler("cloud/models/alias"))
 
 	// Combo builder/reorder
-	r.Get("/combos/builder/options", placeholderHandler("combos/builder/options"))
-	r.Post("/combos/reorder", placeholderHandler("combos/reorder"))
+	r.Get("/combos/builder/options", comboBuilderOptionsHandler(dbConn))
+	r.Post("/combos/reorder", comboReorderHandler(dbConn))
 
 	// Compression compare verify / retrieve
 	r.Post("/compression/compare/verify", placeholderHandler("compression/compare/verify"))

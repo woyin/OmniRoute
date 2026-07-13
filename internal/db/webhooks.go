@@ -80,3 +80,37 @@ func ResetWebhookFailures(db *sql.DB, id string) error {
 		time.Now().UTC().Format(time.RFC3339), id)
 	return err
 }
+
+func GetWebhook(db *sql.DB, id string) (*Webhook, error) {
+	var w Webhook
+	var eventsJSON string
+	err := db.QueryRow(`
+		SELECT id, url, events, secret, is_active, failure_count, created_at, updated_at
+		FROM webhooks WHERE id = ?
+	`, id).Scan(&w.ID, &w.URL, &eventsJSON, &w.Secret, &w.IsActive, &w.FailureCount, &w.CreatedAt, &w.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	_ = json.Unmarshal([]byte(eventsJSON), &w.Events)
+	return &w, nil
+}
+
+func ListWebhookDeliveries(db *sql.DB, webhookID string, limit int) ([]WebhookDelivery, error) {
+	rows, err := db.Query(`
+		SELECT id, webhook_id, event, payload, status_code, response_body, success, created_at
+		FROM webhook_deliveries WHERE webhook_id = ? ORDER BY created_at DESC, id DESC LIMIT ?
+	`, webhookID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	deliveries := make([]WebhookDelivery, 0)
+	for rows.Next() {
+		var d WebhookDelivery
+		if err := rows.Scan(&d.ID, &d.WebhookID, &d.Event, &d.Payload, &d.StatusCode, &d.ResponseBody, &d.Success, &d.CreatedAt); err != nil {
+			return nil, err
+		}
+		deliveries = append(deliveries, d)
+	}
+	return deliveries, rows.Err()
+}
