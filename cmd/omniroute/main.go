@@ -67,6 +67,25 @@ func init() {
 }
 
 func main() {
+	if os.Getenv("OMNIROUTE_SMOKE_TEST") == "sqlite" {
+		cfg := config.Load()
+		dbConn, err := db.GetDB(cfg)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer dbConn.Close()
+		if _, err := dbConn.Exec("CREATE TABLE IF NOT EXISTS smoke_test (value TEXT NOT NULL)"); err != nil {
+			log.Fatal(err)
+		}
+		if _, err := dbConn.Exec("INSERT INTO smoke_test (value) VALUES ('ok')"); err != nil {
+			log.Fatal(err)
+		}
+		var value string
+		if err := dbConn.QueryRow("SELECT value FROM smoke_test ORDER BY rowid DESC LIMIT 1").Scan(&value); err != nil || value != "ok" {
+			log.Fatalf("sqlite smoke failed: value=%q err=%v", value, err)
+		}
+		return
+	}
 	flag.Parse()
 
 	if showHelp {
