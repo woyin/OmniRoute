@@ -27,10 +27,6 @@ jobs:
           sudo apt-get install -y libsqlite3-dev \
             gcc-aarch64-linux-gnu libc6-dev-arm64-cross \
             gcc-x86-64-linux-gnu libc6-dev-amd64-cross
-          # Install musl cross-compilers for static Linux builds
-          curl -L https://musl.cc/x86_64-linux-musl-gcc -o /usr/local/bin/x86_64-linux-musl-gcc
-          curl -L https://musl.cc/aarch64-linux-musl-gcc -o /usr/local/bin/aarch64-linux-musl-gcc
-          chmod +x /usr/local/bin/x86_64-linux-musl-gcc /usr/local/bin/aarch64-linux-musl-gcc
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6

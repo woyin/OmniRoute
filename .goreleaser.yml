@@ -23,11 +23,13 @@ builds:
       - goos: linux
         goarch: arm64
         env:
-          - CC=aarch64-linux-musl-gcc
+          - CC=aarch64-linux-gnu-gcc
+          - CGO_ENABLED=1
       - goos: linux
         goarch: amd64
         env:
-          - CC=x86_64-linux-musl-gcc
+          - CC=x86_64-linux-gnu-gcc
+          - CGO_ENABLED=1
       - goos: darwin
         goarch: arm64
         env:
