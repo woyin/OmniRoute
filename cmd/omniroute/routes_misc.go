@@ -286,11 +286,11 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	// --- Storage health ---
 
 	// --- Sync ---
-	r.Get("/sync/bundle", placeholderHandler("sync/bundle"))
+	r.Get("/sync/bundle", syncBundleHandler(dbConn))
 	r.Post("/sync/cloud", placeholderHandler("sync/cloud"))
 	r.Post("/sync/initialize", syncInitializeHandler())
 	r.Get("/sync/tokens", syncTokensListHandler())
-	r.Get("/sync/tokens/{id}", placeholderHandler("sync/tokens/detail"))
+	r.Delete("/sync/tokens/{id}", syncTokenDetailHandler(dbConn))
 
 	// --- Synced available models ---
 	r.Get("/synced-available-models", syncedAvailableModelsHandler(dbConn))
