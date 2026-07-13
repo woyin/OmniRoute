@@ -14,8 +14,9 @@ import (
 )
 
 var (
-	instance *sql.DB
-	once     sync.Once
+	instance    *sql.DB
+	instanceErr error
+	once        sync.Once
 )
 
 // OpenDB opens a SQLite database connection and runs pending migrations.
@@ -38,11 +39,10 @@ func OpenDB(cfg *config.Config) (*sql.DB, error) {
 
 // GetDB returns a singleton SQLite database connection with WAL mode.
 func GetDB(cfg *config.Config) (*sql.DB, error) {
-	var initErr error
 	once.Do(func() {
-		instance, initErr = OpenDB(cfg)
+		instance, instanceErr = OpenDB(cfg)
 	})
-	return instance, initErr
+	return instance, instanceErr
 }
 
 // CloseDB closes the database connection.

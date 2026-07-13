@@ -14,8 +14,14 @@ func sqliteSmoke(cfg *config.Config) error {
 	}
 	defer dbConn.Close()
 
+	tx, err := dbConn.Begin()
+	if err != nil {
+		return fmt.Errorf("begin smoke transaction: %w", err)
+	}
+	defer tx.Rollback()
+
 	const value = "ok"
-	if _, err := dbConn.Exec(`
+	if _, err := tx.Exec(`
 		INSERT INTO key_value (namespace, key, value) VALUES (?, ?, ?)
 		ON CONFLICT(namespace, key) DO UPDATE SET value = excluded.value`,
 		"smoke", "release", value); err != nil {
@@ -23,7 +29,7 @@ func sqliteSmoke(cfg *config.Config) error {
 	}
 
 	var got string
-	if err := dbConn.QueryRow(
+	if err := tx.QueryRow(
 		"SELECT value FROM key_value WHERE namespace = ? AND key = ?",
 		"smoke", "release",
 	).Scan(&got); err != nil {
