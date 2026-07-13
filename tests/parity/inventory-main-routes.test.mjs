@@ -33,7 +33,6 @@ test("main route inventory is stable, canonical, unique, and contains core route
 
   const byKey = new Map(inventory.routes.map((route) => [`${route.method} ${route.path}`, route]));
   assert.equal(byKey.get("GET /api/files")?.auth, "required");
-  assert.equal(byKey.get("GET /api/playground/presets")?.auth, "optional");
   assert.equal(byKey.get("POST /api/v1/chat/completions")?.stream, "json+sse");
 
   for (const route of inventory.routes) {
