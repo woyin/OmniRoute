@@ -38,7 +38,7 @@ func registerUsageRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Get("/usage/om-usage", placeholderHandler("usage/om-usage"))
 
 	// Provider window costs
-	r.Get("/usage/provider-window-costs", placeholderHandler("usage/provider-window-costs"))
+	r.Get("/usage/provider-window-costs", usageProviderWindowCostsHandler(dbConn))
 
 	// Proxy logs
 	r.Get("/usage/proxy-logs", placeholderHandler("usage/proxy-logs"))
@@ -47,7 +47,7 @@ func registerUsageRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Get("/usage/quota", usageQuotaHandler(dbConn))
 
 	// Request logs
-	r.Get("/usage/request-logs", placeholderHandler("usage/request-logs"))
+	r.Get("/usage/request-logs", usageRequestLogsHandler(dbConn))
 
 	// Route explain
 	r.Get("/usage/route-explain/{id}", placeholderHandler("usage/route-explain"))

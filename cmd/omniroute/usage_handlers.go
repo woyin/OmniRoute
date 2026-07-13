@@ -4,7 +4,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -129,4 +131,42 @@ func tokenStatus(expires string) string {
 func writeJSONResponse(w http.ResponseWriter, value interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(value)
+}
+
+var providerNamePattern = regexp.MustCompile(`^[a-zA-Z0-9._-]{1,80}$`)
+
+func usageRequestLogsHandler(dbConn *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		logs, err := db.GetCallLogs(dbConn, "", 200)
+		if err != nil {
+			jsonError(w, http.StatusInternalServerError, "Failed to fetch logs")
+			return
+		}
+		writeJSONResponse(w, logs)
+	}
+}
+
+func usageProviderWindowCostsHandler(dbConn *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		provider := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("provider")))
+		if !providerNamePattern.MatchString(provider) {
+			jsonError(w, http.StatusBadRequest, "provider query param is required")
+			return
+		}
+		connectionID := strings.TrimSpace(r.URL.Query().Get("connectionId"))
+		var totalCost float64
+		var totalRequests, inputTokens, outputTokens int
+		err := dbConn.QueryRow(`
+			SELECT COALESCE(SUM(cost),0), COUNT(*), COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0)
+			FROM usage_history WHERE provider = ?
+		`, provider).Scan(&totalCost, &totalRequests, &inputTokens, &outputTokens)
+		if err != nil {
+			jsonError(w, http.StatusInternalServerError, "Failed to fetch provider USD costs")
+			return
+		}
+		writeJSONResponse(w, map[string]interface{}{
+			"provider": provider, "connectionId": nullable(connectionID), "totalCostUsd": totalCost,
+			"totalRequests": totalRequests, "inputTokens": inputTokens, "outputTokens": outputTokens,
+		})
+	}
 }
