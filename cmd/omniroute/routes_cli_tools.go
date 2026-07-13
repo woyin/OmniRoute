@@ -2,18 +2,22 @@
 //
 // Provides GET/PUT endpoints for each CLI tools settings (Claude, Cline,
 // Codex, etc.), plus backup, apply, and Antigravity MITM proxy routes.
-//
 package main
 
 import (
 	"database/sql"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/omniroute/omniroute/internal/auth"
 )
 
 // registerCLIToolsRoutes registers CLI tool management sub-routes inside the /api group.
 func registerCLIToolsRoutes(r chi.Router, dbConn *sql.DB) {
 	// CLI tool settings routes
+	protected := r.With(auth.LoginMiddleware(dbConn))
+	protected.Get("/cli-tools/letta-settings", lettaSettingsHandler())
+	protected.Post("/cli-tools/letta-settings", lettaSettingsHandler())
+	protected.Delete("/cli-tools/letta-settings", lettaSettingsHandler())
 	r.Get("/cli-tools/claude-settings", placeholderHandler("cli-tools/claude-settings"))
 	r.Put("/cli-tools/claude-settings", placeholderHandler("cli-tools/claude-settings"))
 
