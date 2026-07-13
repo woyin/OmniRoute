@@ -6,7 +6,6 @@
 //   - Combo health monitoring
 //   - Provider cost analytics
 //   - Quota and utilization reporting
-//
 package main
 
 import (
@@ -22,8 +21,8 @@ func registerUsageRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Post("/usage/budget/bulk", placeholderHandler("usage/budget/bulk"))
 
 	// Call logs
-	r.Get("/usage/call-logs", placeholderHandler("usage/call-logs"))
-	r.Get("/usage/call-logs/{id}", placeholderHandler("usage/call-logs/detail"))
+	r.Get("/usage/call-logs", usageCallLogsHandler(dbConn))
+	r.Get("/usage/call-logs/{id}", usageCallLogDetailHandler(dbConn))
 
 	// Codex reset credit
 	r.Post("/usage/codex-reset-credit", placeholderHandler("usage/codex-reset-credit"))
@@ -45,7 +44,7 @@ func registerUsageRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Get("/usage/proxy-logs", placeholderHandler("usage/proxy-logs"))
 
 	// Quota
-	r.Get("/usage/quota", placeholderHandler("usage/quota"))
+	r.Get("/usage/quota", usageQuotaHandler(dbConn))
 
 	// Request logs
 	r.Get("/usage/request-logs", placeholderHandler("usage/request-logs"))
@@ -60,5 +59,5 @@ func registerUsageRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Get("/usage/utilization", placeholderHandler("usage/utilization"))
 
 	// Per-connection usage
-	r.Get("/usage/{connectionId}", placeholderHandler("usage/connection"))
+	r.Get("/usage/{connectionId}", usageConnectionHandler(dbConn))
 }
