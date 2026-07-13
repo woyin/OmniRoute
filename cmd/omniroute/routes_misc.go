@@ -139,7 +139,9 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	// --- Model combo mappings ---
 	r.Get("/model-combo-mappings", modelComboMappingsListHandler(dbConn))
 	r.Post("/model-combo-mapping", modelComboMappingsCreateHandler(dbConn))
-	r.Get("/model-combo-mappings/{id}", placeholderHandler("model-combo-mapping/detail"))
+	r.Get("/model-combo-mappings/{id}", modelComboMappingDetailHandler(dbConn))
+	r.Put("/model-combo-mappings/{id}", modelComboMappingDetailHandler(dbConn))
+	r.Delete("/model-combo-mappings/{id}", modelComboMappingDetailHandler(dbConn))
 
 	// --- Models (public and management) ---
 	r.Get("/models/alias", modelAliasHandler(dbConn))
@@ -376,8 +378,8 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Get("/cloud/models/alias", placeholderHandler("cloud/models/alias"))
 
 	// Combo builder/reorder
-	r.Get("/combos/builder/options", placeholderHandler("combos/builder/options"))
-	r.Post("/combos/reorder", placeholderHandler("combos/reorder"))
+	r.Get("/combos/builder/options", comboBuilderOptionsHandler(dbConn))
+	r.Post("/combos/reorder", comboReorderHandler(dbConn))
 
 	// Compression compare verify / retrieve
 	r.Post("/compression/compare/verify", placeholderHandler("compression/compare/verify"))
