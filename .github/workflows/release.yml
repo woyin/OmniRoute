@@ -30,7 +30,11 @@ jobs:
           CGO_ENABLED: 1
           GOARCH: ${{ matrix.arch }}
         run: |
+          data_dir=$(mktemp -d)
+          trap 'rm -rf "$data_dir"' EXIT
+          export DATA_DIR=$data_dir
           go build -trimpath -ldflags="-s -w" -o omniroute_linux_${GOARCH} ./cmd/omniroute
+          ./omniroute_linux_${GOARCH} --help
           ./omniroute_linux_${GOARCH} --smoke-sqlite
 
       - uses: actions/upload-artifact@v4
@@ -59,7 +63,11 @@ jobs:
           CGO_ENABLED: 1
           GOARCH: ${{ matrix.arch }}
         run: |
+          data_dir=$(mktemp -d)
+          trap 'rm -rf "$data_dir"' EXIT
+          export DATA_DIR=$data_dir
           go build -trimpath -ldflags="-s -w" -o omniroute_darwin_${GOARCH} ./cmd/omniroute
+          ./omniroute_darwin_${GOARCH} --help
           ./omniroute_darwin_${GOARCH} --smoke-sqlite
 
       - uses: actions/upload-artifact@v4
@@ -86,8 +94,15 @@ jobs:
           GOARCH: amd64
           CC: gcc
         run: |
-          go build -trimpath -ldflags="-s -w" -o omniroute_windows_amd64.exe ./cmd/omniroute
-          .\omniroute_windows_amd64.exe --smoke-sqlite
+          $env:DATA_DIR = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid().ToString())
+          New-Item -ItemType Directory -Path $env:DATA_DIR | Out-Null
+          try {
+            go build -trimpath -ldflags="-s -w" -o omniroute_windows_amd64.exe ./cmd/omniroute
+            .\omniroute_windows_amd64.exe --help
+            .\omniroute_windows_amd64.exe --smoke-sqlite
+          } finally {
+            Remove-Item -Recurse -Force $env:DATA_DIR -ErrorAction SilentlyContinue
+          }
 
       - uses: actions/upload-artifact@v4
         with:
@@ -120,6 +135,18 @@ jobs:
 
       - name: Verify release assets
         run: scripts/ci/verify-release-assets.sh release "${GITHUB_REF_NAME}"
+
+      - name: Remove stale release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          assets=$(mktemp)
+          trap 'rm -f "$assets"' EXIT
+          if gh release view "${GITHUB_REF_NAME}" --json assets --jq '.assets[].name' > "$assets" 2>/dev/null; then
+            while IFS= read -r asset; do
+              gh release delete-asset "${GITHUB_REF_NAME}" "$asset" --yes
+            done < "$assets"
+          fi
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
