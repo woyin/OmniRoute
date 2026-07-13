@@ -58,6 +58,7 @@ var (
 	portFlag  = 0
 	dataDir   = ""
 	mcpMode   = false
+	smokeSQLite = false
 )
 
 func init() {
@@ -65,6 +66,7 @@ func init() {
 	flag.IntVar(&portFlag, "port", 0, "Server port (default: 3456, env: PORT)")
 	flag.StringVar(&dataDir, "data-dir", "", "Data directory (default: ~/.omniroute, env: DATA_DIR)")
 	flag.BoolVar(&mcpMode, "mcp", false, "Start MCP server (stdio transport)")
+	flag.BoolVar(&smokeSQLite, "smoke-sqlite", false, "Run SQLite release smoke check")
 }
 
 func main() {
@@ -90,6 +92,14 @@ func main() {
 	if dataDir != "" {
 		cfg.DataDir = dataDir
 		cfg.SQLiteFile = dataDir + "/storage.sqlite"
+	}
+
+	if smokeSQLite {
+		if err := sqliteSmoke(cfg); err != nil {
+			log.Fatalf("sqlite smoke: %v", err)
+		}
+		fmt.Println("sqlite smoke: ok")
+		return
 	}
 
 	if mcpMode {

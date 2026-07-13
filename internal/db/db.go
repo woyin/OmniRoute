@@ -18,22 +18,29 @@ var (
 	once     sync.Once
 )
 
+// OpenDB opens a SQLite database connection and runs pending migrations.
+func OpenDB(cfg *config.Config) (*sql.DB, error) {
+	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
+		return nil, fmt.Errorf("create data directory: %w", err)
+	}
+	dbConn, err := sql.Open("sqlite3", cfg.SQLiteFile+"?_journal_mode=WAL&_busy_timeout=5000")
+	if err != nil {
+		return nil, err
+	}
+	dbConn.SetMaxOpenConns(1) // SQLite single-writer constraint
+	dbConn.SetMaxIdleConns(2)
+	if err := runMigrations(dbConn); err != nil {
+		dbConn.Close()
+		return nil, fmt.Errorf("migration failed: %w", err)
+	}
+	return dbConn, nil
+}
+
 // GetDB returns a singleton SQLite database connection with WAL mode.
 func GetDB(cfg *config.Config) (*sql.DB, error) {
 	var initErr error
 	once.Do(func() {
-		os.MkdirAll(cfg.DataDir, 0o755)
-		dbPath := cfg.SQLiteFile
-		instance, initErr = sql.Open("sqlite3", dbPath+"?_journal_mode=WAL&_busy_timeout=5000")
-		if initErr != nil {
-			return
-		}
-		instance.SetMaxOpenConns(1) // SQLite single-writer constraint
-		instance.SetMaxIdleConns(2)
-
-		if err := runMigrations(instance); err != nil {
-			initErr = fmt.Errorf("migration failed: %w", err)
-		}
+		instance, initErr = OpenDB(cfg)
 	})
 	return instance, initErr
 }
