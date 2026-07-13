@@ -55,8 +55,8 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Get("/assess", assessHandler(dbConn))
 
 	// --- Batches ---
-	r.Get("/batches", placeholderHandler("batches"))
-	r.Post("/batches", placeholderHandler("batches"))
+	r.Get("/batches", managementBatchesHandler(dbConn))
+	r.Get("/batches/{id}", managementBatchesHandler(dbConn))
 
 	// --- Cache ---
 
