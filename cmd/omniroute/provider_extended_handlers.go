@@ -308,3 +308,78 @@ func providerBulkHandler(dbConn *sql.DB) http.HandlerFunc {
 		writeJSONResponse(w, map[string]interface{}{"success": len(created), "failed": len(errors), "total": len(body.Entries), "created": created, "errors": errors})
 	}
 }
+
+func providerHealthAutopilotActionHandler(dbConn *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Type   string `json:"type"`
+			Target struct {
+				Provider     string `json:"provider"`
+				ConnectionID string `json:"connectionId"`
+				Model        string `json:"model"`
+			} `json:"target"`
+			PreconditionsHash string `json:"preconditionsHash"`
+			DryRun            bool   `json:"dryRun"`
+			Confirm           bool   `json:"confirm"`
+		}
+		if json.NewDecoder(r.Body).Decode(&body) != nil {
+			jsonError(w, 400, "Invalid JSON body")
+			return
+		}
+		allowed := map[string]bool{"clear_provider_breaker": true, "clear_connection_cooldown": true, "clear_stale_connection_error": true, "clear_model_lockout": true, "reactivate_connection": true, "deactivate_connection": true}
+		if !allowed[body.Type] || body.Target.Provider == "" || len(body.PreconditionsHash) < 8 {
+			jsonError(w, 400, "Invalid action")
+			return
+		}
+		if body.DryRun {
+			writeJSONResponse(w, map[string]interface{}{"success": true, "dryRun": true, "type": body.Type, "target": body.Target})
+			return
+		}
+		switch body.Type {
+		case "reactivate_connection", "deactivate_connection":
+			if body.Target.ConnectionID == "" {
+				jsonError(w, 400, "connectionId is required")
+				return
+			}
+			c, err := db.GetProviderConnection(dbConn, body.Target.ConnectionID)
+			if err != nil {
+				jsonError(w, 500, "Failed to apply provider health autopilot action")
+				return
+			}
+			if c == nil {
+				jsonError(w, 404, "Connection not found")
+				return
+			}
+			c.IsActive = body.Type == "reactivate_connection"
+			if c.IsActive {
+				c.TestStatus = "unknown"
+			}
+			if err := db.SaveProviderConnection(dbConn, *c); err != nil {
+				jsonError(w, 500, "Failed to apply provider health autopilot action")
+				return
+			}
+		case "clear_provider_breaker":
+			_, err := dbConn.Exec(`UPDATE domain_circuit_breakers SET state='closed', failure_count=0, updated_at=CURRENT_TIMESTAMP WHERE provider=?`, body.Target.Provider)
+			if err != nil {
+				jsonError(w, 500, "Failed to apply provider health autopilot action")
+				return
+			}
+		case "clear_connection_cooldown", "clear_stale_connection_error":
+			if body.Target.ConnectionID == "" {
+				jsonError(w, 400, "connectionId is required")
+				return
+			}
+			_, err := dbConn.Exec(`UPDATE provider_connections SET test_status='unknown', updated_at=CURRENT_TIMESTAMP WHERE id=?`, body.Target.ConnectionID)
+			if err != nil {
+				jsonError(w, 500, "Failed to apply provider health autopilot action")
+				return
+			}
+		case "clear_model_lockout":
+			if body.Target.Model == "" {
+				jsonError(w, 400, "model is required")
+				return
+			}
+		}
+		writeJSONResponse(w, map[string]interface{}{"success": true, "type": body.Type, "target": body.Target, "appliedAt": time.Now().UTC().Format(time.RFC3339)})
+	}
+}

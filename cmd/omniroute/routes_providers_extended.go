@@ -44,7 +44,7 @@ func registerProvidersExtendedRoutes(r chi.Router, dbConn *sql.DB) {
 	// Provider health / management
 	r.Get("/providers/expiration", providerExpirationHandler(dbConn))
 	r.Get("/providers/health-autopilot", providerHealthAutopilotHandler(dbConn))
-	r.Post("/providers/health-autopilot/actions", placeholderHandler("providers/health-autopilot/actions"))
+	r.Post("/providers/health-autopilot/actions", providerHealthAutopilotActionHandler(dbConn))
 	r.Get("/providers/health-matrix", providerHealthMatrixHandler(dbConn))
 	r.Get("/providers/quota-windows", providerQuotaWindowsHandler())
 	r.Post("/providers/test-batch", providerBatchTestHandler(dbConn))
