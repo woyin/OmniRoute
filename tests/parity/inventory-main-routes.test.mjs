@@ -46,3 +46,11 @@ test("strict mode rejects unknown classifications using stderr only", () => {
   assert.equal(result.stdout, "");
   assert.match(result.stderr, /unknown auth\/stream classification/);
 });
+
+
+test("--ref requires a value", () => {
+  const result = spawnSync(process.execPath, [script, "--ref"], { encoding: "utf8" });
+  assert.notEqual(result.status, 0);
+  assert.equal(result.stdout, "");
+  assert.match(result.stderr, /missing --ref value/);
+});

@@ -2,15 +2,17 @@ name: Go CI
 
 on:
   push:
-    branches: [main, go-rewrite]
+    branches: [go-rewrite]
   pull_request:
-    branches: [main]
+    branches: [go-rewrite]
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-go@v5
         with:
@@ -27,3 +29,14 @@ jobs:
 
       - name: Vet
         run: go vet ./...
+
+      - name: Test parity tools
+        run: node --test tests/parity/*.test.mjs
+
+      - name: Enforce route parity ratchet
+        run: |
+          node scripts/parity/inventory-main-routes.mjs --ref origin/main --allow-unknown > main-routes.json
+          DATA_DIR=$(mktemp -d) go run ./cmd/omniroute --inventory-routes > go-routes.json
+          node scripts/parity/check-route-parity.mjs \
+            --main main-routes.json --go go-routes.json \
+            --max-missing 254 --max-extra 116

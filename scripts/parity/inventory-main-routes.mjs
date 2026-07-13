@@ -5,8 +5,14 @@ import process from "node:process";
 
 import { extractRouteMethods, sortRouteContracts } from "./route-contract-lib.mjs";
 
-const allowUnknown = process.argv.slice(2).includes("--allow-unknown");
-const unexpected = process.argv.slice(2).filter((arg) => arg !== "--allow-unknown");
+const args = process.argv.slice(2);
+const allowUnknown = args.includes("--allow-unknown");
+const refIndex = args.indexOf("--ref");
+const ref = refIndex >= 0 ? args[refIndex + 1] : "main";
+const missingRef = refIndex >= 0 && (!ref || ref.startsWith("--"));
+const unexpected = args.filter((arg, index) =>
+  arg !== "--allow-unknown" && arg !== "--ref" && index !== refIndex + 1
+);
 
 function git(...args) {
   return execFileSync("git", args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
@@ -17,23 +23,25 @@ function fail(message) {
   process.exitCode = 1;
 }
 
-if (unexpected.length > 0) {
+if (missingRef) {
+  fail("missing --ref value");
+} else if (unexpected.length > 0) {
   fail(`unknown argument: ${unexpected[0]}`);
 } else {
   try {
-    const files = git("ls-tree", "-r", "--name-only", "main", "--", "src/app/api")
+    const files = git("ls-tree", "-r", "--name-only", ref, "--", "src/app/api")
       .split("\n")
       .filter((file) => file.endsWith("/route.ts"));
     const routes = [];
 
     for (const source of files) {
-      const contents = git("show", `main:${source}`);
+      const contents = git("show", `${ref}:${source}`);
       const path = `/${source.slice("src/app/".length, -"/route.ts".length)}`;
       for (const method of extractRouteMethods(contents)) {
         routes.push({
           method,
           path,
-          source: `main:${source}`,
+          source: `${ref}:${source}`,
           auth: "unknown",
           stream: "unknown",
         });
