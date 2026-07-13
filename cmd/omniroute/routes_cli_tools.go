@@ -18,6 +18,9 @@ func registerCLIToolsRoutes(r chi.Router, dbConn *sql.DB) {
 	protected.Get("/cli-tools/letta-settings", lettaSettingsHandler())
 	protected.Post("/cli-tools/letta-settings", lettaSettingsHandler())
 	protected.Delete("/cli-tools/letta-settings", lettaSettingsHandler())
+	protected.Get("/cli-tools/omp-settings", ompSettingsHandler(dbConn))
+	protected.Post("/cli-tools/omp-settings", ompSettingsHandler(dbConn))
+	protected.Delete("/cli-tools/omp-settings", ompSettingsHandler(dbConn))
 	r.Get("/cli-tools/claude-settings", placeholderHandler("cli-tools/claude-settings"))
 	r.Put("/cli-tools/claude-settings", placeholderHandler("cli-tools/claude-settings"))
 
