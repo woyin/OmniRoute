@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -241,5 +242,46 @@ func rangeModifier(value string) string {
 		return "-7 days"
 	default:
 		return "-30 days"
+	}
+}
+
+func usageUtilizationHandler(dbConn *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		rangeValue := r.URL.Query().Get("range")
+		if !validUsageRanges[rangeValue] {
+			jsonError(w, http.StatusBadRequest, "Invalid range. Must be one of: 1h, 24h, 7d, 30d")
+			return
+		}
+		provider := r.URL.Query().Get("provider")
+		bucket := map[string]int{"1h": 5, "24h": 60, "7d": 360, "30d": 1440}[rangeValue]
+		query := `SELECT provider, created_at, remaining, limit_val, reset_at FROM quota_snapshots WHERE created_at >= datetime('now', ?)`
+		args := []interface{}{rangeModifier(rangeValue)}
+		if provider != "" {
+			query += " AND provider = ?"
+			args = append(args, provider)
+		}
+		query += " ORDER BY created_at"
+		rows, err := dbConn.Query(query, args...)
+		if err != nil {
+			jsonError(w, http.StatusInternalServerError, "Failed to fetch utilization data")
+			return
+		}
+		defer rows.Close()
+		data := make([]map[string]interface{}, 0)
+		set := map[string]bool{}
+		for rows.Next() {
+			var p, created, reset string
+			var remaining, limit int
+			if rows.Scan(&p, &created, &remaining, &limit, &reset) == nil {
+				set[p] = true
+				data = append(data, map[string]interface{}{"provider": p, "timestamp": created, "remaining": remaining, "limit": limit, "resetAt": reset})
+			}
+		}
+		providers := make([]string, 0, len(set))
+		for p := range set {
+			providers = append(providers, p)
+		}
+		sort.Strings(providers)
+		writeJSONResponse(w, map[string]interface{}{"timeRange": rangeValue, "bucketSizeMinutes": bucket, "providers": providers, "data": data})
 	}
 }

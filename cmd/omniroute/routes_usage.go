@@ -56,7 +56,7 @@ func registerUsageRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Get("/usage/token-limits", placeholderHandler("usage/token-limits"))
 
 	// Utilization
-	r.Get("/usage/utilization", placeholderHandler("usage/utilization"))
+	r.Get("/usage/utilization", usageUtilizationHandler(dbConn))
 
 	// Per-connection usage
 	r.Get("/usage/{connectionId}", usageConnectionHandler(dbConn))
