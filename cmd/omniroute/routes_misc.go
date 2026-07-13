@@ -59,11 +59,6 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Post("/batches", placeholderHandler("batches"))
 
 	// --- Cache ---
-	r.Get("/cache", placeholderHandler("cache"))
-	r.Delete("/cache", placeholderHandler("cache"))
-	r.Get("/cache/stats", placeholderHandler("cache/stats"))
-	r.Get("/cache/entries", placeholderHandler("cache/entries"))
-	r.Get("/cache/reasoning", placeholderHandler("cache/reasoning"))
 
 	// --- CLI connect/tokens/whoami ---
 	r.Post("/cli/connect", cliConnectHandler())
@@ -78,10 +73,7 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Post("/copilot/chat", copilotChatHandler(dbConn, nil))
 
 	// --- DB backups ---
-	r.Get("/db-backups", placeholderHandler("db-backups"))
-	r.Post("/db-backups/export", placeholderHandler("db-backups/export"))
 	r.Post("/db-backups/exportAll", placeholderHandler("db-backups/exportAll"))
-	r.Post("/db-backups/import", placeholderHandler("db-backups/import"))
 
 	// --- Discovery ---
 	r.Post("/discovery/scan", discoveryScanHandler())
@@ -94,16 +86,12 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Get("/docs/codex-cli", docsCodexCLIHandler())
 
 	// --- Evals ---
-	r.Get("/evals", placeholderHandler("evals"))
 	r.Post("/evals", placeholderHandler("evals"))
-	r.Get("/evals/suites", placeholderHandler("evals/suites"))
 	r.Post("/evals/suites", placeholderHandler("evals/suites"))
 	r.Get("/evals/suites/{suiteId}", placeholderHandler("evals/suites/detail"))
 	r.Get("/evals/{suiteId}", placeholderHandler("evals/detail"))
 
 	// --- Fallback chains ---
-	r.Get("/fallback/chains", placeholderHandler("fallback/chains"))
-	r.Post("/fallback/chains", placeholderHandler("fallback/chains"))
 
 	// --- Files ---
 	r.Post("/files", placeholderHandler("files"))
@@ -118,12 +106,8 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Get("/github-skills", githubSkillsHandler(dbConn))
 
 	// --- Guardrails ---
-	r.Get("/guardrails", placeholderHandler("guardrails"))
-	r.Post("/guardrails", placeholderHandler("guardrails"))
-	r.Post("/guardrails/test", placeholderHandler("guardrails/test"))
 
 	// --- Health (degradation) ---
-	r.Get("/health/degradation", placeholderHandler("health/degradation"))
 	r.Get("/health/ping", healthPingHandler())
 
 	// --- Intelligence ---
@@ -138,10 +122,6 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Post("/local/redis/stop", localRedisStopHandler())
 
 	// --- Logs ---
-	r.Get("/logs/{id}", placeholderHandler("logs/detail"))
-	r.Get("/logs/console", placeholderHandler("logs/console"))
-	r.Get("/logs/detail", placeholderHandler("logs/detail"))
-	r.Post("/logs/export", placeholderHandler("logs/export"))
 
 	// --- MCP audit stats ---
 	r.Get("/mcp/audit/stats", mcpAuditStatsHandler(nil))
@@ -169,10 +149,8 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Get("/models/{model}", placeholderHandler("models/detail"))
 
 	// --- Monitoring ---
-	r.Get("/monitoring/health", placeholderHandler("monitoring/health"))
 
 	// --- Network ---
-	r.Get("/network/info", placeholderHandler("network/info"))
 
 	// --- OpenAPI ---
 	r.Get("/openapi/spec", openapiSpecHandler())
@@ -185,7 +163,6 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Post("/playground/simulate-route", placeholderHandler("playground/simulate-route"))
 
 	// --- Plugins ---
-	r.Get("/plugins", placeholderHandler("plugins"))
 	r.Post("/plugins", placeholderHandler("plugins"))
 	r.Get("/plugins/{name}", placeholderHandler("plugins/detail"))
 	r.Post("/plugins/{name}/activate", placeholderHandler("plugins/activate"))
@@ -198,10 +175,6 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Get("/policies", policiesHandler(dbConn))
 
 	// --- Pricing ---
-	r.Get("/pricing", placeholderHandler("pricing"))
-	r.Get("/pricing/defaults", placeholderHandler("pricing/defaults"))
-	r.Get("/pricing/models", placeholderHandler("pricing/models"))
-	r.Post("/pricing/sync", placeholderHandler("pricing/sync"))
 
 	// --- Provider nodes ---
 	r.Get("/provider-nodes", providerNodesListHandler(dbConn))
@@ -225,15 +198,12 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Post("/quota/preview", quotaPreviewHandler(dbConn))
 
 	// --- Rate limit ---
-	r.Get("/rate-limit", placeholderHandler("rate-limit"))
-	r.Get("/rate-limits", placeholderHandler("rate-limits"))
 
 	// --- Relay tokens ---
 	r.Get("/relay/tokens", relayTokensListHandler(dbConn))
 	r.Get("/relay/tokens/{id}", relayTokenDetailHandler(dbConn))
 
 	// --- Resilience ---
-	r.Get("/resilience", placeholderHandler("resilience"))
 	r.Get("/resilience/model-cooldowns", placeholderHandler("resilience/model-cooldowns"))
 	r.Post("/resilience/reset", placeholderHandler("resilience/reset"))
 
@@ -290,9 +260,7 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Get("/session-pools/{provider}", sessionPoolDetailHandler(dbConn))
 
 	// --- Sessions ---
-	r.Get("/sessions", placeholderHandler("sessions"))
 	r.Post("/sessions", placeholderHandler("sessions"))
-	r.Delete("/sessions/{id}", placeholderHandler("sessions/delete"))
 
 	// --- Skills ---
 	r.Get("/skills", skillsListHandler(dbConn))
@@ -307,7 +275,6 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Post("/skills/skillssh/install", placeholderHandler("skills/skillssh/install"))
 
 	// --- Storage health ---
-	r.Get("/storage/health", placeholderHandler("storage/health"))
 
 	// --- Sync ---
 	r.Get("/sync/bundle", placeholderHandler("sync/bundle"))
@@ -321,16 +288,13 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 
 	// --- System ---
 	r.Get("/system/env/repair", placeholderHandler("system/env/repair"))
-	r.Get("/system/version", placeholderHandler("system/version"))
 
 	// --- Tags ---
 	r.Get("/tags", tagsListHandler())
 
 	// --- Telemetry ---
-	r.Get("/telemetry/summary", placeholderHandler("telemetry/summary"))
 
 	// --- Token health ---
-	r.Get("/token-health", placeholderHandler("token-health"))
 
 	// --- Tools / Agent Bridge ---
 	r.Get("/tools/agent-bridge/agents", agentBridgeAgentsListHandler(dbConn))
@@ -382,12 +346,9 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Post("/tunnels/ngrok", placeholderHandler("tunnels/ngrok"))
 	r.Get("/tunnels/tailscale", placeholderHandler("tunnels/tailscale"))
 	r.Get("/tunnels/tailscale/check", placeholderHandler("tunnels/tailscale/check"))
-	r.Post("/tunnels/tailscale/disable", placeholderHandler("tunnels/tailscale/disable"))
-	r.Post("/tunnels/tailscale/enable", placeholderHandler("tunnels/tailscale/enable"))
 	r.Post("/tunnels/tailscale/install", placeholderHandler("tunnels/tailscale/install"))
 	r.Post("/tunnels/tailscale/login", placeholderHandler("tunnels/tailscale/login"))
 	r.Post("/tunnels/tailscale/start-daemon", placeholderHandler("tunnels/tailscale/start-daemon"))
-	r.Get("/tunnels/tailscale/status", placeholderHandler("tunnels/tailscale/status"))
 
 	// --- Version manager ---
 	r.Get("/version-manager/status", versionManagerStatusHandler())
