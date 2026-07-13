@@ -9,22 +9,23 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: GHCR tag to rebuild or repair
+        description: Image tag to rebuild or repair
         required: true
         type: string
-      promote_latest:
-        description: Also replace latest
-        required: false
-        default: false
+      publish_ghcr:
+        description: Publish GHCR
+        required: true
+        default: true
+        type: boolean
+      publish_dockerhub:
+        description: Publish Docker Hub
+        required: true
+        default: true
         type: boolean
 
 concurrency:
-  group: docker-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+  group: docker-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
   cancel-in-progress: false
-
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
 
 permissions:
   contents: read
@@ -61,22 +62,14 @@ jobs:
       - name: Run persistence smoke
         run: scripts/ci/smoke-docker.sh omniroute-smoke:${{ matrix.suffix }}
 
-  publish-digest:
-    name: Publish digest (${{ matrix.platform }})
-    if: github.event_name != 'pull_request'
+  publish-ghcr:
+    name: Publish and verify GHCR
+    if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.publish_ghcr)
     needs: runtime-smoke
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: linux/amd64
-            suffix: amd64
-          - platform: linux/arm64
-            suffix: arm64
-    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -84,64 +77,10 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      - name: Resolve image name
-        id: image
-        run: echo "name=$REGISTRY/${IMAGE_NAME,,}" >>"$GITHUB_OUTPUT"
-
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push digest
-        id: build
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          platforms: ${{ matrix.platform }}
-          outputs: type=image,name=${{ steps.image.outputs.name }},push-by-digest=true,name-canonical=true,push=true
-          cache-from: type=gha,scope=publish-${{ matrix.suffix }}
-          cache-to: type=gha,mode=max,scope=publish-${{ matrix.suffix }}
-
-      - name: Export digest
-        env:
-          DIGEST: ${{ steps.build.outputs.digest }}
-        run: |
-          mkdir -p /tmp/digests
-          touch "/tmp/digests/${DIGEST#sha256:}"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: digest-${{ matrix.suffix }}
-          path: /tmp/digests/*
-          if-no-files-found: error
-          retention-days: 1
-
-  publish-manifest:
-    name: Publish and verify manifest
-    if: github.event_name != 'pull_request'
-    needs: publish-digest
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: digest-*
-          path: /tmp/digests
-          merge-multiple: true
-
-      - uses: docker/setup-buildx-action@v3
-
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
+          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
@@ -149,45 +88,98 @@ jobs:
         id: tags
         env:
           DISPATCH_TAG: ${{ inputs.tag }}
-          PROMOTE_LATEST: ${{ inputs.promote_latest }}
         run: |
-          image="$REGISTRY/${IMAGE_NAME,,}"
-          case "$GITHUB_EVENT_NAME" in
-            workflow_dispatch)
-              tag=$DISPATCH_TAG
-              case "$tag" in ''|*/*|*:*|*[!A-Za-z0-9_.-]*) echo "invalid image tag: $tag" >&2; exit 1;; esac
-              ;;
-            push)
-              if [ "$GITHUB_REF_TYPE" = tag ]; then
-                tag=$GITHUB_REF_NAME
-                PROMOTE_LATEST=true
-              elif [ "$GITHUB_REF_NAME" = go-rewrite ]; then
-                tag=edge
-              else
-                tag=edge-main
-              fi
-              ;;
-          esac
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            tag=$DISPATCH_TAG
+          elif [ "$GITHUB_REF_TYPE" = tag ]; then
+            tag=$GITHUB_REF_NAME
+          elif [ "$GITHUB_REF_NAME" = go-rewrite ]; then
+            tag=edge
+          else
+            tag=edge-main
+          fi
+          case "$tag" in ''|*/*|*:*|*[!A-Za-z0-9_.-]*) echo "invalid image tag: $tag" >&2; exit 1;; esac
           {
             echo "image=$image"
             echo "primary=$image:$tag"
-            echo 'args<<EOF'
-            echo "-t $image:$tag"
-            if [ "$PROMOTE_LATEST" = true ]; then echo "-t $image:latest"; fi
+            echo 'tags<<EOF'
+            echo "$image:$tag"
+            case "$tag" in
+              v*-go) case "$tag" in *-alpha*|*-beta*|*-rc*) ;; *) echo "$image:latest";; esac ;;
+            esac
             echo EOF
           } >>"$GITHUB_OUTPUT"
 
-      - name: Create manifest
+      - name: Build and push manifest
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          cache-from: type=gha,scope=publish-ghcr
+          cache-to: type=gha,mode=max,scope=publish-ghcr
+
+      - name: Verify manifest platforms
+        run: scripts/ci/check-image-platforms.sh '${{ steps.tags.outputs.primary }}'
+
+  publish-dockerhub:
+    name: Publish and verify Docker Hub
+    if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.publish_dockerhub)
+    needs: runtime-smoke
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Resolve publication tags
+        id: tags
         env:
-          TAG_ARGS: ${{ steps.tags.outputs.args }}
-          IMAGE: ${{ steps.tags.outputs.image }}
+          DISPATCH_TAG: ${{ inputs.tag }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
         run: |
-          set --
-          while IFS= read -r arg; do set -- "$@" $arg; done <<EOF
-          $TAG_ARGS
-          EOF
-          for digest in /tmp/digests/*; do set -- "$@" "$IMAGE@sha256:${digest##*/}"; done
-          docker buildx imagetools create "$@"
+          image="${DOCKERHUB_USERNAME,,}/omniroute"
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            tag=$DISPATCH_TAG
+          elif [ "$GITHUB_REF_TYPE" = tag ]; then
+            tag=$GITHUB_REF_NAME
+          elif [ "$GITHUB_REF_NAME" = go-rewrite ]; then
+            tag=edge
+          else
+            tag=edge-main
+          fi
+          case "$tag" in ''|*/*|*:*|*[!A-Za-z0-9_.-]*) echo "invalid image tag: $tag" >&2; exit 1;; esac
+          {
+            echo "primary=$image:$tag"
+            echo 'tags<<EOF'
+            echo "$image:$tag"
+            case "$tag" in
+              v*-go) case "$tag" in *-alpha*|*-beta*|*-rc*) ;; *) echo "$image:latest";; esac ;;
+            esac
+            echo EOF
+          } >>"$GITHUB_OUTPUT"
+
+      - name: Build and push manifest
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          cache-from: type=gha,scope=publish-dockerhub
+          cache-to: type=gha,mode=max,scope=publish-dockerhub
 
       - name: Verify manifest platforms
         run: scripts/ci/check-image-platforms.sh '${{ steps.tags.outputs.primary }}'

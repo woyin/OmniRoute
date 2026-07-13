@@ -29,7 +29,7 @@ test("main route inventory is stable, canonical, unique, and contains core route
   assert.ok(keys.includes("POST /api/auth/login"));
   assert.ok(keys.includes("GET /api/health/ping"));
   assert.ok(keys.includes("POST /api/v1/chat/completions"));
-  assert.ok(keys.includes("GET /api/v1/models/{model...}"));
+  assert.ok(keys.includes("GET /api/v1/models/{...}"));
 
   for (const route of inventory.routes) {
     assert.match(route.path, /^\/api(?:\/|$)/);
