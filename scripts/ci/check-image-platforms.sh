@@ -10,7 +10,7 @@ for item in manifest.get("manifests", []):
     platform = item.get("platform", {})
     os = platform.get("os")
     architecture = platform.get("architecture")
-    if os and architecture:
+    if os and architecture and (os, architecture) != ("unknown", "unknown"):
         print(f"{os}/{architecture}")
 ' | LC_ALL=C sort)
 expected=$(printf '%s\n' linux/amd64 linux/arm64)

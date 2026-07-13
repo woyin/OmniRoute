@@ -16,7 +16,8 @@ chmod +x "$tmp/bin/docker"
 cat >"$tmp/pass.json" <<'EOF'
 {"manifests":[
   {"platform":{"architecture":"amd64","os":"linux"}},
-  {"platform":{"os":"linux","architecture":"arm64"}}
+  {"platform":{"os":"linux","architecture":"arm64"}},
+  {"platform":{"os":"unknown","architecture":"unknown"}}
 ]}
 EOF
 IMAGETOOLS_RAW="$tmp/pass.json" PATH="$tmp/bin:$PATH" "$checker" ghcr.io/example/image:test
