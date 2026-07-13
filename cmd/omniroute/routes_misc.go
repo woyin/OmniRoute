@@ -268,14 +268,15 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	r.Get("/session-pools/{provider}", sessionPoolDetailHandler(dbConn))
 
 	// --- Sessions ---
-	r.Post("/sessions", placeholderHandler("sessions"))
+	r.Post("/sessions", sessionCreateHandler(dbConn))
 
 	// --- Skills ---
 	r.Get("/skills", skillsListHandler(dbConn))
 	r.Post("/skills", skillsCreateHandler(dbConn))
 	r.Get("/skills/{id}", skillsDeleteHandler(dbConn))
-	r.Post("/skills/{id}", placeholderHandler("skills/update"))
-	r.Get("/skills/executions", placeholderHandler("skills/executions"))
+	r.Put("/skills/{id}", skillUpdateHandler(dbConn))
+	r.Get("/skills/executions", skillExecutionsHandler(dbConn))
+	r.Post("/skills/executions", skillExecutionsHandler(dbConn))
 	r.Post("/skills/install", placeholderHandler("skills/install"))
 	r.Get("/skills/marketplace", placeholderHandler("skills/marketplace"))
 	r.Post("/skills/marketplace/install", placeholderHandler("skills/marketplace/install"))
