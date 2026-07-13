@@ -168,12 +168,14 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 
 	// --- Plugins ---
 	r.Post("/plugins", placeholderHandler("plugins"))
-	r.Get("/plugins/{name}", placeholderHandler("plugins/detail"))
-	r.Post("/plugins/{name}/activate", placeholderHandler("plugins/activate"))
-	r.Post("/plugins/{name}/config", placeholderHandler("plugins/config"))
-	r.Post("/plugins/{name}/deactivate", placeholderHandler("plugins/deactivate"))
-	r.Get("/plugins/marketplace", placeholderHandler("plugins/marketplace"))
-	r.Post("/plugins/scan", placeholderHandler("plugins/scan"))
+	r.Get("/plugins/{name}", pluginDetailHandler(dbConn))
+	r.Delete("/plugins/{name}", pluginDetailHandler(dbConn))
+	r.Post("/plugins/{name}/activate", pluginActivationHandler(dbConn, true))
+	r.Get("/plugins/{name}/config", pluginConfigHandler(dbConn))
+	r.Put("/plugins/{name}/config", pluginConfigHandler(dbConn))
+	r.Post("/plugins/{name}/deactivate", pluginActivationHandler(dbConn, false))
+	r.Get("/plugins/marketplace", pluginMarketplaceHandler())
+	r.Post("/plugins/scan", pluginScanHandler(dbConn))
 
 	// --- Policies ---
 	r.Get("/policies", policiesHandler(dbConn))
