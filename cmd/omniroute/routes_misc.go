@@ -3,22 +3,22 @@
 // ⚠️  IMPORTANT: This file registers routes that coexist with main.go's /api
 // group. chi router uses "last match wins", so any path here that duplicates
 // a real handler in main.go would overwrite it with a placeholder. The rules are:
-//   1. Any path registered in main.go (or in auth.LoginMiddleware group) → DO NOT register here.
-//   2. Any path with a working handler (keys*, agent*, services*, tools*, etc.) → KEEP.
-//   3. Any remaining placeholder routes → KEEP as stubs.
-//
+//  1. Any path registered in main.go (or in auth.LoginMiddleware group) → DO NOT register here.
+//  2. Any path with a working handler (keys*, agent*, services*, tools*, etc.) → KEEP.
+//  3. Any remaining placeholder routes → KEEP as stubs.
 package main
 
 import (
 	"database/sql"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/omniroute/omniroute/internal/auth"
 )
 
 // registerMiscRoutes registers miscellaneous sub-routes inside the /api group.
 func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	// --- Auth (public) ---
-	r.Get("/auth/csrf", placeholderHandler("auth/csrf"))
+	r.With(auth.LoginMiddleware(dbConn)).Get("/auth/csrf", auth.CSRFHandler())
 
 	// --- API Keys (v2 style) ---
 	r.Get("/keys", keysListHandler(dbConn))

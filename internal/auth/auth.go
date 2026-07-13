@@ -97,7 +97,7 @@ func LoginMiddleware(dbConn *sql.DB) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Check for session cookie
-			if cookie, err := r.Cookie("omniroute_session"); err == nil && cookie.Value != "" {
+			if cookie, err := r.Cookie("auth_token"); err == nil && validateSessionToken(cookie.Value) {
 				// Session token exists — add to context
 				ctx := context.WithValue(r.Context(), contextKey("session"), cookie.Value)
 				r = r.WithContext(ctx)
@@ -121,9 +121,9 @@ func LoginMiddleware(dbConn *sql.DB) func(http.Handler) http.Handler {
 
 // IsAuthenticated checks if the request has a valid session.
 func IsAuthenticated(r *http.Request) bool {
-	cookie, err := r.Cookie("omniroute_session")
+	cookie, err := r.Cookie("auth_token")
 	if err != nil || cookie.Value == "" {
 		return false
 	}
-	return len(cookie.Value) >= 10
+	return validateSessionToken(cookie.Value)
 }

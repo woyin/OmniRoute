@@ -63,6 +63,7 @@ func TestGenerateRandomSecret(t *testing.T) {
 }
 
 func TestGenerateSessionToken(t *testing.T) {
+	t.Setenv(JWTSecretEnv, "test-secret-at-least-32-bytes-long")
 	token, err := GenerateSessionToken()
 	if err != nil {
 		t.Fatalf("GenerateSessionToken failed: %v", err)
@@ -72,5 +73,11 @@ func TestGenerateSessionToken(t *testing.T) {
 	}
 	if len(token) < 20 {
 		t.Errorf("expected token length >= 20, got %d", len(token))
+	}
+	if !validateSessionToken(token) {
+		t.Error("expected generated JWT to validate")
+	}
+	if validateSessionToken(token + "tampered") {
+		t.Error("expected tampered JWT to fail validation")
 	}
 }

@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
@@ -20,21 +21,9 @@ const (
 	JWTSecretEnv = "JWT_SECRET"
 )
 
-var jwtSecret string
-
-// GetJWTSecret returns the JWT signing secret. Auto-generates one if not set.
+// GetJWTSecret returns configured JWT signing secret. Empty means authentication is disabled.
 func GetJWTSecret() string {
-	if jwtSecret != "" {
-		return jwtSecret
-	}
-	jwtSecret = strings.TrimSpace(os.Getenv(JWTSecretEnv))
-	if jwtSecret == "" {
-		secret := generateRandomSecret(32)
-		jwtSecret = secret
-		log.Println("[AUTH] JWT_SECRET not set — auto-generated a random secret for this session.")
-		log.Println("[AUTH] Set JWT_SECRET env var for persistent sessions across restarts.")
-	}
-	return jwtSecret
+	return strings.TrimSpace(os.Getenv(JWTSecretEnv))
 }
 
 func generateRandomSecret(length int) string {
@@ -117,7 +106,7 @@ func SetManagementPassword(dbConn *sql.DB, password string) error {
 // MarkSetupComplete marks the initial setup as done.
 func MarkSetupComplete(dbConn *sql.DB) error {
 	_, err := dbConn.Exec(
-		"INSERT INTO key_value (namespace, key, value) VALUES ('settings', 'setupComplete', 'true') "+
+		"INSERT INTO key_value (namespace, key, value) VALUES ('settings', 'setupComplete', 'true') " +
 			"ON CONFLICT(namespace, key) DO UPDATE SET value = excluded.value",
 	)
 	return err
@@ -135,16 +124,44 @@ func VerifyManagementPassword(dbConn *sql.DB, password string) bool {
 	return VerifyPassword(password, storedHash)
 }
 
-// GenerateSessionToken creates a session token.
+// GenerateSessionToken creates main-branch-compatible HS256 JWT valid for 30 days.
 func GenerateSessionToken() (string, error) {
-	payload := map[string]interface{}{
-		"sub": "admin",
-		"iat": time.Now().Unix(),
-		"jti": uuid.New().String(),
+	secret := GetJWTSecret()
+	if secret == "" {
+		return "", fmt.Errorf("JWT_SECRET not set")
 	}
-	payloadJSON, _ := json.Marshal(payload)
-	token := base64.URLEncoding.EncodeToString(payloadJSON)
-	return token, nil
+	header, _ := json.Marshal(map[string]string{"alg": "HS256", "typ": "JWT"})
+	payload, _ := json.Marshal(map[string]interface{}{
+		"authenticated": true,
+		"exp":           time.Now().Add(30 * 24 * time.Hour).Unix(),
+	})
+	unsigned := base64.RawURLEncoding.EncodeToString(header) + "." + base64.RawURLEncoding.EncodeToString(payload)
+	mac := hmac.New(sha256.New, []byte(secret))
+	_, _ = mac.Write([]byte(unsigned))
+	return unsigned + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil)), nil
+}
+
+func validateSessionToken(token string) bool {
+	secret := GetJWTSecret()
+	parts := strings.Split(token, ".")
+	if secret == "" || len(parts) != 3 {
+		return false
+	}
+	mac := hmac.New(sha256.New, []byte(secret))
+	_, _ = mac.Write([]byte(parts[0] + "." + parts[1]))
+	signature, err := base64.RawURLEncoding.DecodeString(parts[2])
+	if err != nil || !hmac.Equal(signature, mac.Sum(nil)) {
+		return false
+	}
+	payloadJSON, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return false
+	}
+	var payload struct {
+		Authenticated bool  `json:"authenticated"`
+		ExpiresAt     int64 `json:"exp"`
+	}
+	return json.Unmarshal(payloadJSON, &payload) == nil && payload.Authenticated && payload.ExpiresAt >= time.Now().Unix()
 }
 
 // constantTimeEqual does a constant-time string comparison.
@@ -205,22 +222,30 @@ func (h *RequireLoginHandler) handlePost(w http.ResponseWriter, r *http.Request)
 		RequireLogin *bool  `json:"requireLogin,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		w.Header().Set("Content-Type", "application/json"); w.WriteHeader(http.StatusBadRequest); w.Write([]byte(`{"error":{"message":"Invalid JSON"}}`))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":{"message":"Invalid JSON"}}`))
 		return
 	}
 
 	if body.Password == "" {
-		w.Header().Set("Content-Type", "application/json"); w.WriteHeader(http.StatusBadRequest); w.Write([]byte(`{"error":{"message":"password is required"}}`))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":{"message":"password is required"}}`))
 		return
 	}
 
 	if len(body.Password) < 6 {
-		w.Header().Set("Content-Type", "application/json"); w.WriteHeader(http.StatusBadRequest); w.Write([]byte(`{"error":{"message":"password must be at least 6 characters"}}`))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":{"message":"password must be at least 6 characters"}}`))
 		return
 	}
 
 	if err := SetManagementPassword(h.DB, body.Password); err != nil {
-		w.Header().Set("Content-Type", "application/json"); w.WriteHeader(http.StatusInternalServerError); w.Write([]byte(`{"error":{"message":"Failed to set password"}}`))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"error":{"message":"Failed to set password"}}`))
 		return
 	}
 
@@ -246,7 +271,9 @@ func (h *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	secret := GetJWTSecret()
 	if secret == "" {
-		w.Header().Set("Content-Type", "application/json"); w.WriteHeader(http.StatusInternalServerError); w.Write([]byte(`{"error":{"message":"Server misconfigured: JWT_SECRET not set"}}`))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"error":{"message":"Server misconfigured: JWT_SECRET not set"}}`))
 		return
 	}
 
@@ -254,43 +281,50 @@ func (h *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		w.Header().Set("Content-Type", "application/json"); w.WriteHeader(http.StatusBadRequest); w.Write([]byte(`{"error":{"message":"Invalid JSON"}}`))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":{"message":"Invalid JSON"}}`))
 		return
 	}
 
 	if body.Password == "" {
-		w.Header().Set("Content-Type", "application/json"); w.WriteHeader(http.StatusBadRequest); w.Write([]byte(`{"error":{"message":"password is required"}}`))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":{"message":"password is required"}}`))
 		return
 	}
 
 	if !VerifyManagementPassword(h.DB, body.Password) {
 		log.Println("[AUTH] Login failed: invalid password")
-		w.Header().Set("Content-Type", "application/json"); w.WriteHeader(http.StatusUnauthorized); w.Write([]byte(`{"error":{"message":"Invalid password"}}`))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(`{"error":{"message":"Invalid password"}}`))
 		return
 	}
 
 	token, err := GenerateSessionToken()
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json"); w.WriteHeader(http.StatusInternalServerError); w.Write([]byte(`{"error":{"message":"Failed to generate session"}}`))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"error":{"message":"Failed to generate session"}}`))
 		return
 	}
 
 	log.Println("[AUTH] Login successful")
 
 	http.SetCookie(w, &http.Cookie{
-		Name:     "omniroute_session",
+		Name:     "auth_token",
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   false,
+		Secure:   secureCookie(r),
 		SameSite: http.SameSiteLaxMode,
-		MaxAge:   86400 * 7,
+		MaxAge:   86400 * 30,
 	})
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
-		"token":   token,
 	})
 }
 
@@ -304,7 +338,7 @@ func (h *LogoutHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.SetCookie(w, &http.Cookie{
-		Name:     "omniroute_session",
+		Name:     "auth_token",
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
@@ -315,4 +349,12 @@ func (h *LogoutHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
 	})
+}
+
+func secureCookie(r *http.Request) bool {
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("AUTH_COOKIE_SECURE")), "true") {
+		return true
+	}
+	proto := strings.ToLower(strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Proto"), ",")[0]))
+	return proto == "https" || r.TLS != nil
 }
