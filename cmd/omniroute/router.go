@@ -1,0 +1,754 @@
+package main
+
+import (
+	"database/sql"
+	"encoding/json"
+	"log"
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
+	chimw "github.com/go-chi/chi/v5/middleware"
+
+	"github.com/omniroute/omniroute/internal/a2a"
+	"github.com/omniroute/omniroute/internal/auth"
+	"github.com/omniroute/omniroute/internal/config"
+	"github.com/omniroute/omniroute/internal/handler"
+	"github.com/omniroute/omniroute/internal/management"
+	"github.com/omniroute/omniroute/internal/mcp"
+	"github.com/omniroute/omniroute/internal/middleware"
+	"github.com/omniroute/omniroute/internal/oauth"
+	"github.com/omniroute/omniroute/internal/provider/registry"
+)
+
+func buildRouter(cfg *config.Config, dbConn *sql.DB) chi.Router {
+	// Initialize MCP server
+	mcpServer := mcp.NewMCPServer(dbConn)
+
+	// Initialize A2A server
+	a2aServer := a2a.NewA2AServer(dbConn)
+
+	// Initialize OAuth handler
+	oauthHandler := oauth.NewOAuthHandler(dbConn)
+
+	// Initialize management handlers (DB-backed)
+	mgmtResilience := &management.ResilienceHandler{DB: dbConn}
+	mgmtCache := &management.CacheHandler{DB: dbConn}
+	mgmtSessions := &management.SessionsHandler{DB: dbConn}
+	mgmtRateLimit := &management.RateLimitHandler{DB: dbConn}
+	mgmtUpstreamProxy := &management.UpstreamProxyHandler{DB: dbConn}
+	mgmtPricing := &management.PricingHandler{DB: dbConn}
+	mgmtCompression := &management.CompressionHandler{DB: dbConn}
+	mgmtMonitoring := &management.MonitoringHandler{DB: dbConn, DataDir: cfg.DataDir}
+	mgmtLogs := &management.LogsHandler{DB: dbConn}
+	mgmtGuardrails := &management.GuardrailsHandler{DB: dbConn}
+	mgmtTelemetry := &management.TelemetryHandler{DB: dbConn}
+	mgmtAnalytics := &management.AnalyticsHandler{DB: dbConn}
+	mgmtTunnels := &management.TunnelHandler{DataDir: cfg.DataDir}
+	mgmtPlugins := &management.PluginsHandler{DB: dbConn}
+	mgmtEvals := &management.EvalsHandler{DB: dbConn}
+	mgmtDBBackups := &management.DBBackupsHandler{DB: dbConn, DataDir: cfg.DataDir, DBPath: cfg.SQLiteFile}
+
+	// Rate limiters for API and management routes
+	rlV1 := middleware.NewRateLimiter(100, 200)  // 100 req/s, burst 200 for v1 proxy routes
+	rlMgmt := middleware.NewRateLimiter(50, 100) // 50 req/s, burst 100 for management routes
+
+	r := chi.NewRouter()
+	r.Use(chimw.RequestID)
+	r.Use(chimw.RealIP)
+	r.Use(middleware.Recovery)
+	r.Use(middleware.CORS)
+	r.Use(middleware.StripTrailingSlash)
+	r.Use(chimw.Compress(5))
+
+	// Root — API info landing page
+	r.Get("/", webFileServer())
+
+	r.Get("/health", (&handler.HealthHandler{DB: dbConn}).ServeHTTP)
+
+	r.Get("/.well-known/agent.json", serveAgentCard())
+
+	// Management routes (no auth required for initial setup)
+	// ---- Management API (/api/*) ----
+	// All management routes require rate limiting; protected sub-routes also
+	// require login authentication via auth.LoginMiddleware.
+	r.Route("/api", func(r chi.Router) {
+		r.Use(middleware.RateLimitMiddleware(rlMgmt))
+
+		// Auth management
+		r.Get("/auth/require-login", (&auth.RequireLoginHandler{DB: dbConn}).ServeHTTP)
+		r.Post("/auth/require-login", (&auth.RequireLoginHandler{DB: dbConn}).ServeHTTP)
+		r.Post("/auth/login", (&auth.LoginHandler{DB: dbConn}).ServeHTTP)
+		r.Post("/auth/logout", (&auth.LogoutHandler{}).ServeHTTP)
+		r.Get("/auth/status", (&handler.AuthStatusHandler{DB: dbConn}).ServeHTTP)
+
+		// Login middleware for protected routes
+		r.Group(func(r chi.Router) {
+			r.Use(auth.LoginMiddleware(dbConn))
+			r.Use(auth.CSRFMiddleware)
+
+			// Providers CRUD
+			r.Get("/providers", (&handler.ProvidersHandler{DB: dbConn}).ServeHTTP)
+			r.Post("/providers", (&handler.ProvidersHandler{DB: dbConn}).ServeHTTP)
+			r.Get("/providers/{id}", (&handler.ProviderDetailHandler{DB: dbConn}).ServeHTTP)
+			r.Put("/providers/{id}", (&handler.ProviderDetailHandler{DB: dbConn}).ServeHTTP)
+			r.Delete("/providers/{id}", (&handler.ProviderDetailHandler{DB: dbConn}).ServeHTTP)
+			r.Post("/providers/test", (&handler.ProviderTestHandler{DB: dbConn, Config: cfg}).ServeHTTP)
+
+			// Combos CRUD
+			r.Get("/combos", (&handler.CombosHandler{DB: dbConn}).ServeHTTP)
+			r.Post("/combos", (&handler.CombosHandler{DB: dbConn}).ServeHTTP)
+			r.Get("/combos/{id}", (&handler.ComboDetailHandler{DB: dbConn}).ServeHTTP)
+			r.Put("/combos/{id}", (&handler.ComboDetailHandler{DB: dbConn}).ServeHTTP)
+			r.Delete("/combos/{id}", (&handler.ComboDetailHandler{DB: dbConn}).ServeHTTP)
+			r.Post("/combos/test", (&handler.ComboTestHandler{DB: dbConn, Config: cfg}).ServeHTTP)
+			r.Get("/combos/metrics", (&handler.ComboMetricsHandler{DB: dbConn}).ServeHTTP)
+			r.Post("/combos/auto", (&handler.ComboAutoHandler{DB: dbConn}).ServeHTTP)
+
+			// API Keys CRUD
+			r.Get("/api-keys", listAPIKeysHandler(dbConn))
+			r.Post("/api-keys", createAPIKeyHandler(dbConn))
+			r.Delete("/api-keys/{key}", (&handler.APIKeyDetailHandler{DB: dbConn}).ServeHTTP)
+
+			// Settings
+			r.Get("/settings", (&handler.SettingsHandler{DB: dbConn}).ServeHTTP)
+			r.Put("/settings", (&handler.SettingsHandler{DB: dbConn}).ServeHTTP)
+
+			// Settings sub-routes (stub handlers)
+			registerSettingsRoutes(r, dbConn)
+
+			// Usage & analytics
+			r.Get("/usage/analytics", (&handler.UsageHandler{DB: dbConn}).ServeHTTP)
+			r.Get("/usage/history", (&handler.UsageHistoryHandler{DB: dbConn}).ServeHTTP)
+			r.Get("/usage/logs", (&handler.CallLogsHandler{DB: dbConn}).ServeHTTP)
+			r.Get("/token-health", (&handler.TokenHealthHandler{DB: dbConn}).ServeHTTP)
+			r.Get("/usage/provider-limits", (&handler.ProviderLimitsHandler{DB: dbConn}).ServeHTTP)
+
+			// Extended usage routes
+			registerUsageRoutes(r, dbConn)
+
+			// DB health
+			r.Get("/db/health", (&handler.DBHealthHandler{DB: dbConn}).ServeHTTP)
+
+			// Import/Export
+			r.Get("/settings/export-json", (&handler.ExportHandler{DB: dbConn}).ServeHTTP)
+			r.Post("/settings/import-json", (&handler.ImportHandler{DB: dbConn}).ServeHTTP)
+
+			// Init
+			r.Post("/init", (&handler.InitHandler{DB: dbConn}).ServeHTTP)
+		})
+
+		// Extended providers routes (auth imports, health, bulk ops, etc.)
+		registerProvidersExtendedRoutes(r, dbConn)
+
+		// CLI tools management routes (settings, config, runtime, etc.)
+		registerCLIToolsRoutes(r, dbConn)
+
+		// Scattered misc routes (auth, models, plugins, webhooks, etc.)
+		registerMiscRoutes(r, dbConn)
+		registerParityRoutes(r, dbConn)
+
+		// Public management routes
+		r.Get("/free-models", freeModelsHandler())
+		r.Get("/provider-stats", providerStatsHandler(dbConn))
+		r.Get("/free-tier/summary", (&handler.FreeTierSummaryHandler{}).ServeHTTP)
+		r.Get("/models/catalog", (&handler.ModelsCatalogHandler{DB: dbConn}).ServeHTTP)
+		r.Get("/providers/registry", func(w http.ResponseWriter, r *http.Request) {
+			entries := registry.List()
+			type providerInfo struct {
+				ID         string `json:"id"`
+				Name       string `json:"name"`
+				AuthType   string `json:"authType"`
+				Format     string `json:"format"`
+				ModelCount int    `json:"modelCount"`
+				HasFree    bool   `json:"hasFree"`
+				BaseURL    string `json:"baseUrl,omitempty"`
+			}
+			var list []providerInfo
+			for _, e := range entries {
+				list = append(list, providerInfo{
+					ID:         e.ID,
+					Name:       e.Name,
+					AuthType:   string(e.AuthType),
+					Format:     string(e.Format),
+					ModelCount: len(e.Models),
+					HasFree:    e.HasFree,
+					BaseURL:    e.BaseURL,
+				})
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"object": "list",
+				"data":   list,
+				"total":  len(list),
+			})
+		})
+
+		// System routes (public)
+		r.Get("/system/version", (&handler.VersionHandler{}).ServeHTTP)
+		r.Post("/shutdown", (&handler.ShutdownHandler{}).ServeHTTP)
+
+		// MCP Server routes
+		r.Get("/mcp/status", mcpServer.HandleMCPStatus)
+		r.Get("/mcp/tools", mcpServer.HandleMCPTools)
+		r.Get("/mcp/sse", mcpServer.HandleSSE)
+		r.Post("/mcp/stream", mcpServer.HandleStream)
+		r.Get("/mcp/stream", mcpServer.HandleStream)
+		r.Get("/mcp/audit", mcpServer.HandleMCPAudit)
+
+		// A2A routes
+		r.Post("/a2a", a2aServer.HandleJSONRPC)
+		r.Get("/a2a/status", a2aServer.HandleStatus)
+		r.Get("/a2a/tasks", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{"object": "list", "data": []interface{}{}})
+		})
+		r.Get("/a2a/tasks/{id}", func(w http.ResponseWriter, r *http.Request) {
+			id := chi.URLParam(r, "id")
+			if dbConn != nil {
+				var status, input, output, createdAt string
+				err := dbConn.QueryRow("SELECT status, COALESCE(input,''), COALESCE(output,''), created_at FROM a2a_tasks WHERE id = ?", id).Scan(&status, &input, &output, &createdAt)
+				if err == nil {
+					json.NewEncoder(w).Encode(map[string]interface{}{"id": id, "status": status, "input": input, "output": output, "createdAt": createdAt})
+					return
+				}
+			}
+			http.Error(w, `{"error":{"message":"Task not found"}}`, http.StatusNotFound)
+		})
+
+		// OAuth routes
+		r.Get("/oauth/{provider}/{action}", oauthHandler.ServeHTTP)
+		r.Post("/oauth/{provider}/{action}", oauthHandler.ServeHTTP)
+		r.Post("/oauth/{provider}/paste-credentials", oauthHandler.HandlePasteCredentials)
+		r.Post("/oauth/cliproxy-import", oauthHandler.HandleCLIProxyImport)
+		r.Post("/oauth/codex/import", oauthHandler.HandleCLIProxyImport)
+		r.Post("/oauth/codex/import-token", oauthHandler.HandleCLIProxyImport)
+		r.Post("/oauth/cursor/import", oauthHandler.HandleCLIProxyImport)
+		r.Post("/oauth/cursor/auto-import", oauthHandler.HandleCLIProxyImport)
+		r.Post("/oauth/kiro/auto-import", oauthHandler.HandleCLIProxyImport)
+
+		// Cache management routes
+		r.Get("/cache", mgmtCache.Status)
+		r.Delete("/cache", mgmtCache.Flush)
+		r.Get("/cache/stats", mgmtCache.Stats)
+		r.Get("/cache/entries", mgmtCache.Entries)
+		r.Get("/cache/reasoning", mgmtCache.Reasoning)
+
+		// Guardrails routes
+		r.Get("/guardrails", mgmtGuardrails.List)
+		r.Post("/guardrails", mgmtGuardrails.Create)
+		r.Post("/guardrails/test", mgmtGuardrails.Test)
+
+		// Fallback chains
+		r.Get("/fallback/chains", mgmtResilience.FallbackChainsList)
+		r.Post("/fallback/chains", mgmtResilience.FallbackChainsCreate)
+
+		// Compression routes
+		r.Get("/compression/engines", mgmtCompression.Engines)
+		r.Post("/compression/preview", mgmtCompression.Preview)
+		r.Get("/compression/compare", mgmtCompression.Compare)
+		r.Get("/compression/language-packs", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{"packs": []interface{}{}})
+		})
+		r.Get("/compression/rules", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{"rules": []interface{}{}})
+		})
+
+		// Context / compression combos
+		r.Get("/context/combos", mgmtCompression.CombosList)
+		r.Post("/context/combos", mgmtCompression.CombosCreate)
+		r.Get("/context/analytics", mgmtCompression.ContextAnalytics)
+		r.Get("/context/rtk/config", mgmtCompression.RTKConfig)
+		r.Get("/context/rtk/filters", mgmtCompression.RTKFilters)
+
+		// Provider nodes
+		r.Get("/provider-nodes", providerNodesListHandler(dbConn))
+		r.Post("/provider-nodes", providerNodesCreateHandler(dbConn))
+		r.Delete("/provider-nodes/{id}", providerNodesDeleteHandler(dbConn))
+
+		// Model combo mappings
+		r.Get("/model-combo-mappings", modelComboMappingsListHandler(dbConn))
+		r.Post("/model-combo-mappings", modelComboMappingsCreateHandler(dbConn))
+
+		// Version manager
+		r.Get("/version-manager/status", versionManagerStatusHandler())
+		r.Post("/version-manager/check-update", versionManagerCheckUpdateHandler())
+		r.Post("/version-manager/install", versionManagerInstallHandler())
+		r.Post("/version-manager/restart", versionManagerRestartHandler())
+		r.Post("/version-manager/start", versionManagerStartHandler())
+		r.Post("/version-manager/stop", versionManagerStopHandler())
+
+		// DB backups
+		r.Get("/db-backups", mgmtDBBackups.List)
+		r.Post("/db-backups/export", mgmtDBBackups.Export)
+		r.Get("/db-backups/exportAll", mgmtDBBackups.ExportAll)
+		r.Post("/db-backups/import", mgmtDBBackups.Import)
+
+		// Tunnels
+		r.Get("/tunnels/cloudflared", mgmtTunnels.CloudflaredStatus)
+		r.Get("/tunnels/ngrok", mgmtTunnels.NgrokStatus)
+		r.Post("/tunnels/tailscale/enable", mgmtTunnels.TailscaleEnable)
+		r.Post("/tunnels/tailscale/disable", mgmtTunnels.TailscaleDisable)
+		r.Get("/tunnels/tailscale/status", mgmtTunnels.TailscaleStatus)
+
+		// Discovery
+		r.Post("/discovery/scan", discoveryScanHandler())
+		r.Get("/discovery/results", discoveryResultsHandler())
+		r.Get("/discovery/results/{id}", discoveryResultDetailHandler())
+		r.Post("/discovery/verify/{id}", discoveryVerifyHandler())
+
+		// Resilience
+		r.Get("/resilience", mgmtResilience.Status)
+		r.Get("/resilience/circuit-breakers", mgmtResilience.CircuitBreakersList)
+		r.Post("/resilience/circuit-breakers/{id}/reset", mgmtResilience.CircuitBreakerReset)
+
+		// Sessions
+		r.Get("/sessions", mgmtSessions.List)
+		r.Delete("/sessions/{id}", mgmtSessions.Delete)
+
+		// Rate limits
+		r.Get("/rate-limits", mgmtRateLimit.List)
+		r.Post("/rate-limits", mgmtRateLimit.Create)
+
+		// Upstream proxy (matches main branch per-provider API)
+		r.Get("/upstream-proxy/{providerId}", mgmtUpstreamProxy.Get)
+		r.Put("/upstream-proxy/{providerId}", mgmtUpstreamProxy.Upsert)
+		r.Delete("/upstream-proxy/{providerId}", mgmtUpstreamProxy.Delete)
+
+		// Plugins
+		r.Get("/plugins", mgmtPlugins.List)
+		r.Post("/plugins/install", mgmtPlugins.Install)
+
+		// Evals
+		r.Get("/evals", mgmtEvals.List)
+		r.Get("/evals/suites", mgmtEvals.Suites)
+
+		// Cloud agents
+		r.Get("/cloud/auth", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{"authenticated": false})
+		})
+		r.Post("/cloud/credentials/update", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
+		})
+		r.Get("/cloud/model/resolve", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{"model": "", "provider": ""})
+		})
+
+		// Provider metrics/models
+		r.Get("/provider-metrics", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{"metrics": []interface{}{}})
+		})
+		r.Get("/provider-models", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{"models": []interface{}{}})
+		})
+
+		// Compliance
+		r.Get("/compliance/audit-log", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{"entries": []interface{}{}, "total": 0})
+		})
+
+		// Monitoring
+		r.Get("/monitoring/health", mgmtMonitoring.Health)
+		r.Get("/health/degradation", mgmtMonitoring.Degradation)
+
+		// Network info
+		r.Get("/network/info", mgmtMonitoring.NetworkInfo)
+
+		// Storage health
+		r.Get("/storage/health", mgmtMonitoring.StorageHealth)
+
+		// Tags
+		r.Get("/tags", tagsListHandler())
+
+		// Telemetry
+		r.Get("/telemetry/summary", mgmtTelemetry.Summary)
+
+		// Intelligence sync
+		r.Post("/intelligence/sync", intelligenceSyncHandler())
+
+		// Playground
+		r.Get("/playground/presets", playgroundPresetsHandler())
+
+		// Headroom
+		r.Post("/headroom/start", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "status": "running"})
+		})
+		r.Get("/headroom/status", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{"status": "idle", "active": false})
+		})
+		r.Post("/headroom/stop", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "status": "stopped"})
+		})
+
+		// Gamification
+		r.Get("/gamification/level", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{"level": 1, "xp": 0, "nextLevel": 100})
+		})
+		r.Get("/gamification/badges", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{"badges": []interface{}{}})
+		})
+		r.Get("/gamification/leaderboard", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{"leaderboard": []interface{}{}})
+		})
+
+		// CLI tools status
+		r.Get("/cli-tools/status", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{"tools": []interface{}{}})
+		})
+		r.Get("/cli-tools/all-statuses", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{"statuses": []interface{}{}})
+		})
+
+		// Sync
+		r.Get("/sync/tokens", syncTokensListHandler())
+		r.Post("/sync/initialize", syncInitializeHandler())
+
+		// Search (management)
+		r.Get("/search/analytics", mgmtAnalytics.AutoRouting)
+
+		// Translator
+		r.Post("/translator/translate", translatorTranslateHandler())
+		r.Post("/translator/transform-stream", translatorTransformStreamHandler())
+		r.Get("/translator/detect", translatorDetectHandler())
+		r.Get("/translator/history", translatorHistoryHandler())
+
+		// Skills routes
+		r.Get("/skills", skillsListHandler(dbConn))
+		r.Post("/skills", skillsCreateHandler(dbConn))
+		r.Delete("/skills/{id}", skillsDeleteHandler(dbConn))
+
+		// Memory routes
+		r.Get("/memory", memoryListHandler(dbConn))
+		r.Post("/memory", memoryCreateHandler(dbConn))
+		r.Delete("/memory/{id}", memoryDeleteHandler(dbConn))
+		r.Get("/memory/search", memorySearchHandler(dbConn))
+
+		// Webhooks routes
+		r.Get("/webhooks", webhooksListHandler(dbConn))
+		r.Post("/webhooks", webhooksCreateHandler(dbConn))
+		r.Delete("/webhooks/{id}", webhooksDeleteHandler(dbConn))
+		r.Post("/webhooks/{id}/test", webhooksTestHandler(dbConn))
+
+		// Keys management routes
+		r.Get("/keys", keysListHandler(dbConn))
+		r.Post("/keys", keysListHandler(dbConn))
+		r.Get("/keys/{id}", keysDetailHandler(dbConn))
+		r.Put("/keys/{id}", keysUpdateHandler(dbConn))
+		r.Delete("/keys/{id}", keysDeleteHandler(dbConn))
+		r.Get("/keys/{id}/reveal", keysRevealHandler(dbConn))
+		r.Post("/keys/{id}/regenerate", keysRegenerateHandler(dbConn))
+		r.Get("/keys/{id}/usage-limits", keysUsageLimitsHandler(dbConn))
+		r.Get("/keys/{id}/devices", keysDevicesHandler(dbConn))
+
+		// Key groups
+		r.Get("/keys/groups", keyGroupsListHandler(dbConn))
+		r.Post("/keys/groups", keyGroupsCreateHandler(dbConn))
+		r.Get("/keys/groups/{id}", keyGroupsDetailHandler(dbConn))
+		r.Get("/keys/groups/{id}/keys", keyGroupsKeysHandler(dbConn))
+		r.Get("/keys/groups/{id}/permissions", keyGroupsPermissionsHandler(dbConn))
+
+		// Pricing routes
+		r.Get("/pricing", mgmtPricing.List)
+		r.Get("/pricing/defaults", mgmtPricing.Defaults)
+		r.Get("/pricing/models", mgmtPricing.Models)
+		r.Post("/pricing/sync", mgmtPricing.Sync)
+
+		// Relay tokens
+		r.Get("/relay/tokens", relayTokensListHandler(dbConn))
+		r.Get("/relay/tokens/{id}", relayTokenDetailHandler(dbConn))
+
+		// Routing decisions
+		r.Get("/routing/decisions/{requestId}", routingDecisionDetailHandler(dbConn))
+
+		// ACP (Agent Communication Protocol)
+		r.Get("/acp/agents", acpAgentsListHandler(dbConn))
+
+		// Agent skills
+		r.Get("/agent-skills", agentSkillsListHandler(dbConn))
+		r.Post("/agent-skills", agentSkillsCreateHandler(dbConn))
+		r.Get("/agent-skills/{id}", agentSkillsDetailHandler(dbConn))
+		r.Delete("/agent-skills/{id}", agentSkillsDeleteHandler(dbConn))
+		r.Get("/agent-skills/coverage", agentSkillsCoverageHandler(dbConn))
+		r.Post("/agent-skills/generate", agentSkillsGenerateHandler())
+		r.Get("/agent-skills/{id}/raw", agentSkillsRawHandler(dbConn))
+
+		// Admin
+		r.Get("/admin/concurrency", adminConcurrencyHandler(dbConn))
+
+		// Assess
+		r.Post("/assess", assessHandler(dbConn))
+
+		// Copilot
+		r.Post("/copilot/chat", copilotChatHandler(dbConn, cfg))
+
+		// Docs
+		r.Get("/docs", docsHandler())
+		r.Get("/docs/codex-cli", docsCodexCLIHandler())
+
+		// Local Redis
+		r.Get("/local/redis/status", localRedisStatusHandler())
+		r.Post("/local/redis/start", localRedisStartHandler())
+		r.Post("/local/redis/stop", localRedisStopHandler())
+
+		// Middleware hooks
+		r.Get("/middleware/hooks", middlewareHooksListHandler(dbConn))
+		r.Get("/middleware/hooks/{name}", middlewareHooksDetailHandler(dbConn))
+
+		// OpenAPI
+		r.Get("/openapi/spec", openapiSpecHandler())
+		r.Post("/openapi/try", openapiTryHandler())
+
+		// Policies
+		r.Get("/policies", policiesHandler(dbConn))
+
+		// Proxy fallback
+		r.Post("/proxy-fallback/test", proxyFallbackTestHandler(dbConn))
+
+		// Session pools
+		r.Get("/session-pools", sessionPoolsListHandler(dbConn))
+		r.Get("/session-pools/{provider}", sessionPoolDetailHandler(dbConn))
+
+		// Synced available models
+		r.Get("/synced-available-models", syncedAvailableModelsHandler(dbConn))
+
+		// GitHub skills
+		r.Get("/github-skills", githubSkillsHandler(dbConn))
+
+		// Free provider rankings
+		r.Get("/free-provider-rankings", freeProviderRankingsHandler(dbConn))
+
+		// Services management (9router, bifrost, cliproxy, mux)
+		r.Get("/services/9router/status", servicesStatusHandler("9router"))
+		r.Post("/services/9router/install", servicesInstallHandler("9router"))
+		r.Post("/services/9router/start", servicesStartHandler("9router"))
+		r.Post("/services/9router/stop", servicesStopHandler("9router"))
+		r.Post("/services/9router/restart", servicesRestartHandler("9router"))
+		r.Post("/services/9router/update", servicesUpdateHandler("9router"))
+		r.Post("/services/9router/auto-start", servicesAutoStartHandler("9router"))
+		r.Get("/services/9router/models", nineRouterModelsHandler())
+		r.Post("/services/9router/rotate-key", nineRouterRotateKeyHandler())
+		r.Post("/services/9router/provider-expose", nineRouterProviderExposeHandler())
+		r.Get("/services/bifrost/status", servicesStatusHandler("bifrost"))
+		r.Post("/services/bifrost/install", servicesInstallHandler("bifrost"))
+		r.Post("/services/bifrost/start", servicesStartHandler("bifrost"))
+		r.Post("/services/bifrost/stop", servicesStopHandler("bifrost"))
+		r.Post("/services/bifrost/restart", servicesRestartHandler("bifrost"))
+		r.Post("/services/bifrost/update", servicesUpdateHandler("bifrost"))
+		r.Post("/services/bifrost/auto-start", servicesAutoStartHandler("bifrost"))
+		r.Get("/services/cliproxy/status", servicesStatusHandler("cliproxy"))
+		r.Post("/services/cliproxy/install", servicesInstallHandler("cliproxy"))
+		r.Post("/services/cliproxy/start", servicesStartHandler("cliproxy"))
+		r.Post("/services/cliproxy/stop", servicesStopHandler("cliproxy"))
+		r.Post("/services/cliproxy/restart", servicesRestartHandler("cliproxy"))
+		r.Post("/services/cliproxy/update", servicesUpdateHandler("cliproxy"))
+		r.Post("/services/cliproxy/auto-start", servicesAutoStartHandler("cliproxy"))
+		r.Get("/services/mux/status", servicesStatusHandler("mux"))
+		r.Post("/services/mux/install", servicesInstallHandler("mux"))
+		r.Post("/services/mux/start", servicesStartHandler("mux"))
+		r.Post("/services/mux/stop", servicesStopHandler("mux"))
+		r.Post("/services/mux/restart", servicesRestartHandler("mux"))
+		r.Post("/services/mux/update", servicesUpdateHandler("mux"))
+		r.Post("/services/mux/auto-start", servicesAutoStartHandler("mux"))
+		r.Get("/services/{name}/logs", servicesLogsHandler())
+
+		// Internal
+		r.Post("/internal/codex-responses-ws", internalCodexResponsesWSHandler())
+
+		// Logs
+		r.Get("/logs", mgmtLogs.List)
+		r.Get("/logs/{id}", mgmtLogs.Detail)
+		r.Get("/logs/console", mgmtLogs.Console)
+		r.Get("/logs/detail", mgmtLogs.List)
+		r.Post("/logs/export", mgmtLogs.Export)
+
+		// Rate limit (singular, matches main branch)
+		r.Get("/rate-limit", mgmtRateLimit.GetConfig)
+
+		// MCP audit stats
+		r.Get("/mcp/audit/stats", mcpAuditStatsHandler(dbConn))
+
+		// Restart
+		r.Post("/restart", restartHandler())
+
+		// Health ping
+		r.Get("/health/ping", healthPingHandler())
+
+		// CLI routes
+		r.Post("/cli/connect", cliConnectHandler())
+		r.Get("/cli/whoami", cliWhoamiHandler(dbConn))
+		r.Get("/cli/tokens", cliTokensListHandler(dbConn))
+		r.Get("/cli/tokens/{id}", cliTokenDetailHandler(dbConn))
+
+		// Analytics
+		r.Get("/analytics/auto-routing", mgmtAnalytics.AutoRouting)
+		r.Get("/analytics/compression", mgmtAnalytics.Compression)
+		r.Get("/analytics/diversity", mgmtAnalytics.Diversity)
+
+		// Codex connect
+		r.Get("/codex/connect/{token}", codexConnectHandler(dbConn))
+
+		// Quota routes
+		r.Get("/quota/groups", quotaGroupsListHandler(dbConn))
+		r.Get("/quota/groups/{id}", quotaGroupsDetailHandler(dbConn))
+		r.Get("/quota/keys/{id}/models", quotaKeysModelsHandler(dbConn))
+		r.Get("/quota/plans", quotaPlansListHandler(dbConn))
+		r.Get("/quota/plans/{connectionId}", quotaPlansDetailHandler(dbConn))
+		r.Get("/quota/pools", quotaPoolsListHandler(dbConn))
+		r.Get("/quota/pools/{id}", quotaPoolsDetailHandler(dbConn))
+		r.Get("/quota/pools/{id}/log", quotaPoolsLogHandler(dbConn))
+		r.Get("/quota/pools/{id}/usage", quotaPoolsUsageHandler(dbConn))
+		r.Post("/quota/preview", quotaPreviewHandler(dbConn))
+
+		// Tools / Agent Bridge
+		r.Get("/tools/agent-bridge/agents", agentBridgeAgentsListHandler(dbConn))
+		r.Get("/tools/agent-bridge/agents/{id}", agentBridgeAgentDetailHandler(dbConn))
+		r.Get("/tools/agent-bridge/agents/{id}/detect", agentBridgeAgentDetectHandler(dbConn))
+		r.Get("/tools/agent-bridge/agents/{id}/dns", agentBridgeAgentDnsHandler(dbConn))
+		r.Get("/tools/agent-bridge/agents/{id}/mappings", agentBridgeAgentMappingsHandler(dbConn))
+		r.Post("/tools/agent-bridge/bypass", agentBridgeBypassHandler(dbConn))
+		r.Get("/tools/agent-bridge/cert", agentBridgeCertHandler(dbConn))
+		r.Get("/tools/agent-bridge/cert/download", agentBridgeCertDownloadHandler(dbConn))
+		r.Post("/tools/agent-bridge/cert/regenerate", agentBridgeCertRegenerateHandler(dbConn))
+		r.Get("/tools/agent-bridge/config", agentBridgeConfigHandler(dbConn))
+		r.Post("/tools/agent-bridge/diagnose", agentBridgeDiagnoseHandler(dbConn))
+		r.Post("/tools/agent-bridge/repair", agentBridgeRepairHandler(dbConn))
+		r.Get("/tools/agent-bridge/server", agentBridgeServerHandler(dbConn))
+		r.Get("/tools/agent-bridge/state", agentBridgeStateHandler(dbConn))
+		r.Post("/tools/agent-bridge/tproxy", agentBridgeTproxyHandler(dbConn))
+		r.Get("/tools/agent-bridge/upstream-ca", agentBridgeUpstreamCAHandler(dbConn))
+		r.Post("/tools/agent-bridge/upstream-ca/test", agentBridgeUpstreamCATestHandler(dbConn))
+
+		// Tools / Traffic Inspector
+		r.Get("/tools/traffic-inspector/capture-modes", trafficInspectorCaptureModesHandler())
+		r.Get("/tools/traffic-inspector/capture-modes/http-proxy", trafficInspectorHTTPProxyHandler())
+		r.Get("/tools/traffic-inspector/capture-modes/system-proxy", trafficInspectorSystemProxyHandler())
+		r.Get("/tools/traffic-inspector/capture-modes/tls-intercept", trafficInspectorTLSInterceptHandler())
+		r.Get("/tools/traffic-inspector/export.har", trafficInspectorExportHARHandler())
+		r.Get("/tools/traffic-inspector/hosts", trafficInspectorHostsHandler())
+		r.Get("/tools/traffic-inspector/hosts/{host}", trafficInspectorHostDetailHandler())
+		r.Post("/tools/traffic-inspector/internal/ingest", trafficInspectorInternalIngestHandler())
+		r.Get("/tools/traffic-inspector/requests", trafficInspectorRequestsHandler())
+		r.Get("/tools/traffic-inspector/requests/{id}", trafficInspectorRequestDetailHandler())
+		r.Post("/tools/traffic-inspector/requests/{id}/annotation", trafficInspectorRequestAnnotationHandler())
+		r.Post("/tools/traffic-inspector/requests/{id}/replay", trafficInspectorRequestReplayHandler())
+		r.Get("/tools/traffic-inspector/sessions", trafficInspectorSessionsHandler())
+		r.Get("/tools/traffic-inspector/sessions/{id}", trafficInspectorSessionDetailHandler())
+		r.Get("/tools/traffic-inspector/sessions/{id}/export.har", trafficInspectorSessionExportHARHandler())
+		r.Get("/tools/traffic-inspector/sessions/{id}/requests", trafficInspectorSessionRequestsHandler())
+		r.Get("/tools/traffic-inspector/ws", trafficInspectorWSHandler())
+	})
+
+	// API v1 routes (optional API key auth — enforce when REQUIRE_API_KEY=true)
+	r.Route("/api/v1", func(r chi.Router) {
+		if cfg.RequireApiKey {
+			r.Use(auth.RequireAPIKey(dbConn))
+		} else {
+			r.Use(auth.OptionalAPIKey(dbConn))
+		}
+		r.Use(middleware.RateLimitMiddleware(rlV1))
+		r.Use(middleware.PromptInjectionGuard)
+		// Chat / Responses
+		r.Post("/chat/completions", (&handler.ChatHandler{DB: dbConn, Config: cfg}).ServeHTTP)
+		r.Post("/responses", (&handler.ChatHandler{DB: dbConn, Config: cfg}).ServeHTTP)
+		r.Post("/responses/{path}", (&handler.ChatHandler{DB: dbConn, Config: cfg}).ServeHTTP)
+		r.Post("/completions", (&handler.CompletionsHandler{DB: dbConn, Config: cfg}).ServeHTTP)
+
+		// Models
+		r.Get("/models", (&handler.ModelsHandler{DB: dbConn}).ServeHTTP)
+		r.Get("/models/{model}", (&handler.ModelsHandler{DB: dbConn}).ServeHTTP)
+
+		// Embeddings
+		r.Post("/embeddings", (&handler.EmbeddingsHandler{DB: dbConn, Config: cfg}).ServeHTTP)
+
+		// Images
+		r.Post("/images/generations", (&handler.ImageGenerationsHandler{DB: dbConn, Config: cfg}).ServeHTTP)
+
+		// Audio
+		r.Post("/audio/speech", (&handler.AudioSpeechHandler{DB: dbConn, Config: cfg}).ServeHTTP)
+		r.Post("/audio/transcriptions", (&handler.AudioTranscriptionsHandler{DB: dbConn, Config: cfg}).ServeHTTP)
+
+		// Moderations
+		r.Post("/moderations", (&handler.ModerationsHandler{DB: dbConn, Config: cfg}).ServeHTTP)
+
+		// Rerank
+		r.Post("/rerank", (&handler.RerankHandler{DB: dbConn, Config: cfg}).ServeHTTP)
+
+		// Search
+		r.Post("/search", (&handler.SearchHandler{DB: dbConn, Config: cfg}).ServeHTTP)
+
+		// Files
+		r.Post("/files", (&handler.FilesHandler{DB: dbConn, Config: cfg}).ServeHTTP)
+		r.Get("/files", (&handler.FilesHandler{DB: dbConn, Config: cfg}).ServeHTTP)
+		r.Get("/files/{id}", (&handler.FilesHandler{DB: dbConn, Config: cfg}).ServeHTTP)
+
+		// Batches
+		r.Post("/batches", (&handler.BatchesHandler{DB: dbConn, Config: cfg}).ServeHTTP)
+		r.Get("/batches", (&handler.BatchesHandler{DB: dbConn, Config: cfg}).ServeHTTP)
+		r.Get("/batches/{id}", (&handler.BatchesHandler{DB: dbConn, Config: cfg}).ServeHTTP)
+
+		// Videos
+		r.Post("/videos/generations", (&handler.VideoGenerationsHandler{DB: dbConn, Config: cfg}).ServeHTTP)
+
+		// Music
+		r.Post("/music/generations", (&handler.MusicGenerationsHandler{DB: dbConn, Config: cfg}).ServeHTTP)
+		r.Get("/music/generations", (&handler.MusicGenerationsHandler{DB: dbConn, Config: cfg}).ServeHTTP)
+
+		// Messages (Anthropic format)
+		r.Post("/messages", (&handler.MessagesHandler{DB: dbConn, Config: cfg}).ServeHTTP)
+		r.Post("/messages/count_tokens", (&handler.MessagesCountTokensHandler{DB: dbConn, Config: cfg}).ServeHTTP)
+
+		// OCR
+		r.Post("/ocr", (&handler.OCRHandler{DB: dbConn, Config: cfg}).ServeHTTP)
+
+		// Image edits
+		r.Post("/images/edits", (&handler.ImageEditsHandler{DB: dbConn, Config: cfg}).ServeHTTP)
+
+		// Audio translations
+		r.Post("/audio/translations", (&handler.AudioTranslationsHandler{DB: dbConn, Config: cfg}).ServeHTTP)
+
+		// Provider-specific routing
+		r.Post("/providers/{provider}/chat/completions", (&handler.ProviderChatHandler{DB: dbConn, Config: cfg}).ServeHTTP)
+
+		// Quota check
+		r.Post("/quotas/check", (&handler.QuotaCheckHandler{DB: dbConn}).ServeHTTP)
+
+		// Registered keys
+		r.Get("/registered-keys", (&handler.RegisteredKeysHandler{DB: dbConn}).ServeHTTP)
+
+		// Parity v1 routes (1:1 match with main branch)
+		registerParityV1Routes(r, dbConn)
+	})
+
+	// V1Beta routes
+	r.Route("/api/v1beta", func(r chi.Router) {
+		r.Get("/models", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{"object": "list", "data": []interface{}{}})
+		})
+		r.Get("/models/{path}", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{"object": "list", "data": []interface{}{}})
+		})
+	})
+
+	log.Printf("[OmniRoute] MCP server initialized (%d tools)", len(mcpServer.Tools()))
+	log.Printf("[OmniRoute] A2A server initialized")
+	log.Printf("[OmniRoute] Routes configured")
+
+	return r
+}

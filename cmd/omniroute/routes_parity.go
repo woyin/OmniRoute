@@ -7,7 +7,6 @@
 //   - Memory management endpoints (health, reindex, summarize)
 //   - Context management endpoints (caveman, RTK, combos)
 //   - V1 proxy endpoints (VSCode, relay, agents, etc.)
-//
 package main
 
 import (
@@ -123,7 +122,6 @@ func registerParityV1Routes(r chi.Router, dbConn *sql.DB) {
 	r.Post("/management/proxies/bulk-assign", v1Success("management-proxies-bulk-assign"))
 	r.Get("/management/proxies/health", v1EmptyObject("management-proxies-health"))
 	r.Get("/me/status", v1EmptyObject("me-status"))
-	r.Get("/models/{path:.+}", v1ModelsDetailHandler(dbConn))
 	r.Get("/provider-plugin-manifest", v1EmptyObject("provider-plugin-manifest"))
 	r.Post("/providers/{provider}/embeddings", v1ProxyHandler(dbConn))
 	r.Post("/providers/{provider}/images/generations", v1ProxyHandler(dbConn))
@@ -134,7 +132,6 @@ func registerParityV1Routes(r chi.Router, dbConn *sql.DB) {
 	r.Post("/registered-keys/{id}/revoke", v1Success("registered-keys-revoke"))
 	r.Post("/relay/chat/completions", v1ProxyHandler(dbConn))
 	r.Post("/relay/chat/completions/bifrost", v1ProxyHandler(dbConn))
-	r.Post("/responses/{path:.+}", v1ProxyHandler(dbConn))
 	r.Get("/search/analytics", v1EmptyObject("search-analytics"))
 	r.Post("/batches/{id}/cancel", v1Success("batches-cancel"))
 	r.Post("/batches/delete-completed", v1Success("batches-delete-completed"))
