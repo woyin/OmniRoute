@@ -96,10 +96,8 @@ func registerMiscRoutes(r chi.Router, dbConn *sql.DB) {
 	// --- Fallback chains ---
 
 	// --- Files ---
-	r.Post("/files", placeholderHandler("files"))
-	r.Get("/files", placeholderHandler("files"))
-	r.Get("/files/{id}", placeholderHandler("files/detail"))
-	r.Get("/files/{id}/content", placeholderHandler("files/content"))
+	r.Get("/files", managementFilesListHandler(dbConn))
+	r.Get("/files/{id}/content", managementFileContentHandler(dbConn))
 
 	// --- Free provider rankings (public) ---
 	r.Get("/free-provider-rankings", freeProviderRankingsHandler(dbConn))

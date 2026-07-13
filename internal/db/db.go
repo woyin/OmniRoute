@@ -79,6 +79,7 @@ func runMigrations(db *sql.DB) error {
 		{"007_token_limits_parity", schemaV7},
 		{"008_usage_budgets", schemaV8},
 		{"009_playground_presets", schemaV9},
+		{"010_files", schemaV10},
 	}
 
 	for _, m := range migrations {
@@ -126,6 +127,7 @@ var schemaV6 = migrations.SchemaV6
 var schemaV7 = migrations.SchemaV7
 var schemaV8 = migrations.SchemaV8
 var schemaV9 = migrations.SchemaV9
+var schemaV10 = migrations.SchemaV10
 
 const schemaV1 = `
 CREATE TABLE IF NOT EXISTS provider_connections (
