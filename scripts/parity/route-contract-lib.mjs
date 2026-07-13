@@ -12,20 +12,63 @@ const HTTP_METHODS = new Set([
 
 export function normalizeRoutePath(path) {
   return path
-    .replace(/\[\.\.\.([^\]]+)\]/g, "{$1...}")
-    .replace(/\[([^\]]+)\]/g, "{$1}");
+    .replace(/\[\[\.\.\.[^\]]+\]\]/g, "{...?}")
+    .replace(/\[\.\.\.[^\]]+\]/g, "{...}")
+    .replace(/\[[^\]]+\]/g, "{}")
+    .replace(/\{([^}]*)\}/g, (_, parameter) => {
+      if (parameter === "...?" || parameter.endsWith("...?")) return "{...?}";
+      return parameter === "..." || parameter.endsWith("...") ? "{...}" : "{}";
+    });
+}
+
+function maskCommentsAndStrings(source) {
+  let result = "";
+  let state = "code";
+  for (let i = 0; i < source.length; i += 1) {
+    const char = source[i];
+    const next = source[i + 1];
+    if (state === "code" && char === "/" && next === "/") {
+      state = "line-comment";
+      result += "  ";
+      i += 1;
+    } else if (state === "code" && char === "/" && next === "*") {
+      state = "block-comment";
+      result += "  ";
+      i += 1;
+    } else if (state === "code" && (char === '"' || char === "'" || char === "`")) {
+      state = char;
+      result += " ";
+    } else if (state === "line-comment" && char === "\n") {
+      state = "code";
+      result += char;
+    } else if (state === "block-comment" && char === "*" && next === "/") {
+      state = "code";
+      result += "  ";
+      i += 1;
+    } else if ((state === '"' || state === "'" || state === "`") && char === "\\") {
+      result += "  ";
+      i += 1;
+    } else if (state === char && (state === '"' || state === "'" || state === "`")) {
+      state = "code";
+      result += " ";
+    } else {
+      result += state === "code" ? char : char === "\n" ? "\n" : " ";
+    }
+  }
+  return result;
 }
 
 export function extractRouteMethods(source) {
   const methods = new Set();
-  const patterns = [
-    /export\s+(?:async\s+)?function\s+([A-Z]+)\b/g,
-    /export\s+const\s+([A-Z]+)\b/g,
-    /\bas\s+([A-Z]+)\b/g,
-  ];
+  const code = maskCommentsAndStrings(source);
+  const declarations = /\bexport\s+(?:async\s+)?(?:function|const)\s+([A-Z]+)\b/g;
+  const reExports = /\bexport\s*\{([^}]*)\}/g;
 
-  for (const pattern of patterns) {
-    for (const match of source.matchAll(pattern)) {
+  for (const match of code.matchAll(declarations)) {
+    if (HTTP_METHODS.has(match[1]) && match[1] !== "OPTIONS") methods.add(match[1]);
+  }
+  for (const block of code.matchAll(reExports)) {
+    for (const match of block[1].matchAll(/\bas\s+([A-Z]+)\b/g)) {
       if (HTTP_METHODS.has(match[1]) && match[1] !== "OPTIONS") methods.add(match[1]);
     }
   }

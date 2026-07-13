@@ -8,10 +8,12 @@ import {
   sortRouteContracts,
 } from "../../scripts/parity/route-contract-lib.mjs";
 
-test("normalizeRoutePath canonicalizes Next and chi parameters", () => {
-  assert.equal(normalizeRoutePath("/api/users/[id]"), "/api/users/{id}");
-  assert.equal(normalizeRoutePath("/api/files/[...catchAll]"), "/api/files/{catchAll...}");
-  assert.equal(normalizeRoutePath("/api/users/{id}"), "/api/users/{id}");
+test("normalizeRoutePath canonicalizes parameter names and catch-all semantics", () => {
+  assert.equal(normalizeRoutePath("/api/users/[id]"), "/api/users/{}");
+  assert.equal(normalizeRoutePath("/api/users/{userID}"), "/api/users/{}");
+  assert.equal(normalizeRoutePath("/api/files/[...catchAll]"), "/api/files/{...}");
+  assert.equal(normalizeRoutePath("/api/files/{rest...}"), "/api/files/{...}");
+  assert.equal(normalizeRoutePath("/api/files/[[...slug]]"), "/api/files/{...?}");
 });
 
 test("extractRouteMethods finds function, const, and re-export methods", () => {
@@ -24,6 +26,19 @@ export const runtime = "nodejs";
 `;
 
   assert.deepEqual(extractRouteMethods(source), ["DELETE", "GET", "POST"]);
+});
+
+test("extractRouteMethods ignores comments, strings, templates, and imports", () => {
+  const source = `
+// export function GET() {}
+/* export const POST = handler; */
+const example = "export function PUT() {}";
+const template = \`export { handler as PATCH }\`;
+import { handler as DELETE } from "./handlers";
+export const HEAD = handler;
+`;
+
+  assert.deepEqual(extractRouteMethods(source), ["HEAD"]);
 });
 
 test("extractRouteMethods preserves explicit uncommon HTTP methods", () => {
