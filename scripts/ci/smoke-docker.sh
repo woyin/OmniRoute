@@ -30,7 +30,7 @@ cleanup() {
 trap cleanup EXIT HUP INT TERM
 
 health() {
-  wget -qO- -T 1 "http://127.0.0.1:$port/health"
+  wget -qO- -T 1 --tries=1 "http://127.0.0.1:$port/health"
 }
 
 wait_healthy() {
